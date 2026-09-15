@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Visual Subnet Calculator - 代码分析报告</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.7;color:#1a1a1a;background:#f8f9fa}
+.c{max-width:960px;margin:0 auto;padding:40px 24px}
+h1{font-size:28px;margin-bottom:8px;color:#033270}
+h2{font-size:22px;margin:32px 0 12px;color:#1368aa;border-bottom:2px solid #e0e0e0;padding-bottom:6px}
+h3{font-size:17px;margin:20px 0 8px;color:#4091c9}
+p{margin-bottom:10px}ul,ol{margin:8px 0 12px 24px}li{margin-bottom:4px}
+.m{color:#666;font-size:14px;margin-bottom:24px}
+.card{background:#fff;border-radius:8px;padding:20px;margin:12px 0;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.card.warn{border-left:4px solid #ef3c2d}
+.card.info{border-left:4px solid #4091c9}
+.card.good{border-left:4px solid #16db93}
+.card.crit{border-left:4px solid #cb1b16;background:#fef5f5}
+code{background:#f0f0f0;padding:2px 6px;border-radius:3px;font-family:"SF Mono",Consolas,monospace;font-size:13px}
+pre{background:#1e1e1e;color:#d4d4d4;padding:16px;border-radius:6px;overflow-x:auto;margin:12px 0;font-size:13px;line-height:1.5}
+table{width:100%;border-collapse:collapse;margin:12px 0}
+th,td{text-align:left;padding:8px 12px;border-bottom:1px solid #e0e0e0;font-size:14px}
+th{background:#f5f5f5;font-weight:600}
+.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:600}
+.badge.high{background:#cb1b16;color:#fff}.badge.med{background:#ef3c2d;color:#fff}.badge.low{background:#f29479;color:#fff}
+.stat{display:inline-block;background:#e8f4fd;padding:8px 16px;border-radius:6px;margin:4px;font-size:14px}
+.stat strong{color:#033270}
+</style>
+</head>
+<body>
+<div class="c">
+<h1>Visual Subnet Calculator — 代码分析报告</h1>
+<div class="m">分析时间: 2026-09-15 | 项目版本: v1.4.0 | 语言: JavaScript (Vanilla + jQuery)</div>
+<div>
+<span class="stat"><strong>1020</strong> 行核心代码</span>
+<span class="stat"><strong>4</strong> 种云模式</span>
+<span class="stat"><strong>9</strong> 个测试文件</span>
+<span class="stat"><strong>3</strong> 个外部依赖</span>
+</div>
+
+<h2>1. 项目概述</h2>
+<div class="card info">
+<p><strong>Visual Subnet Calculator</strong> 是一个可视化子网计算工具，帮助网络管理员快速设计和规划网络布局。用户输入基础网络地址（如 10.0.0.0/16），通过 Split/Join 操作划分子网，并为每个子网添加备注和颜色。</p>
+<p>项目基于 davidc 的原始工具重新开发，部署在 visualsubnetcalc.com。</p>
+</div>
+
+<h3>技术栈</h3>
+<table>
+<tr><th>类别</th><th>技术</th><th>说明</th></tr>
+<tr><td>前端框架</td><td>无 (Vanilla JS)</td><td>无 React/Vue，纯原生 JavaScript</td></tr>
+<tr><td>DOM 操作</td><td>jQuery 3.7.1</td><td>事件绑定、DOM 操作、表单验证</td></tr>
+<tr><td>UI 组件</td><td>Bootstrap 5.3.6</td><td>布局、模态框、工具提示、下拉菜单</td></tr>
+<tr><td>表单验证</td><td>jQuery Validation 1.21</td><td>网络地址和子网大小验证</td></tr>
+<tr><td>URL 压缩</td><td>LZ-String 1.5</td><td>将配置压缩到 URL 中实现分享</td></tr>
+<tr><td>测试</td><td>Playwright 1.52</td><td>E2E 测试，9 个测试文件</td></tr>
+<tr><td>部署</td><td>Docker + nginx</td><td>多阶段构建，非特权用户运行</td></tr>
+</table>
+
+<h2>2. 核心架构</h2>
+<h3>2.1 文件结构</h3>
+<pre>dist/                    # 构建输出（直接部署）
+├── index.html           # 单页应用入口 (290 行)
+├── js/main.js           # 全部应用逻辑 (1020 行)
+├── js/lz-string.min.js  # URL 压缩库
+├── css/main.css         # 自定义样式 (273 行)
+└── css/bootstrap.min.css # 编译后的 Bootstrap
+
+src/                     # 源码目录
+├── scss/custom.scss     # SCSS 源文件
+├── tests/               # Playwright E2E 测试 (9 文件)
+└── package.json         # 依赖和构建脚本
+
+Dockerfile               # 多阶段 Docker 构建</pre>
+
+<h3>2.2 全局状态</h3>
+<pre>let subnetMap = {};           // 核心：嵌套树结构存储子网层次
+let subnetNotes = {};        // 未使用（遗留变量）
+let maxNetSize = 0;          // 根网络掩码大小
+let operatingMode = 'Standard';  // Std/AWS/Azure/OCI
+let inflightColor = 'NONE';      // 待应用的选中颜色
+let configVersion = '2';        // 配置格式版本</pre>
+
+<h3>2.3 数据结构 — subnetMap 嵌套树</h3>
+<pre>// 10.0.0.0/16 被 split 成两个 /17
+{
+  "10.0.0.0/16": {
+    "10.0.0.0/17": {
+      "_note": "Web Servers",
+      "_color": "#a0c4ff"
+    },
+    "10.0.128.0/17": {
+      "_note": "Database"
+    }
+  }
+}
+// 约定: CIDR字符串作键, _note/_color为元数据, {}空对象=叶子节点</pre>
+
+<h3>2.4 核心函数调用链</h3>
+<table>
+<tr><th>函数</th><th>职责</th><th>调用时机</th></tr>
+<tr><td><code>reset()</code></td><td>初始化网络，校验边界</td><td>Go 按钮、页面加载</td></tr>
+<tr><td><code>renderTable()</code></td><td>清空表格，递归渲染树</td><td>每次 split/join/note 变更</td></tr>
+<tr><td><code>addRow()</code></td><td>生成单行 HTML，计算 IP 范围</td><td>每个叶子节点</td></tr>
+<tr><td><code>mutate_subnet_map()</code></td><td>递归执行 split/join/note/color</td><td>用户交互事件</td></tr>
+<tr><td><code>exportConfig()</code></td><td>导出 JSON（可选压缩）</td><td>分享 URL、Import/Export</td></tr>
+<tr><td><code>minifySubnetMap()</code></td><td>Nth 位置表示法压缩子网键</td><td>生成分享 URL</td></tr>
+<tr><td><code>expandSubnetMap()</code></td><td>从压缩格式还原子网树</td><td>加载分享 URL</td></tr>
+</table>
+
+<h2>3. 功能特性</h2>
+<h3>3.1 多云模式支持</h3>
+<table>
+<tr><th>模式</th><th>最小子网</th><th>保留地址</th><th>保留项</th></tr>
+<tr><td>Standard</td><td>/32</td><td>2</td><td>网络地址 + 广播地址</td></tr>
+<tr><td>AWS</td><td>/28</td><td>5</td><td>网络+VPC路由+DNS+未来+广播</td></tr>
+<tr><td>Azure</td><td>/29</td><td>5</td><td>网络+网关+DNS映射x2+广播</td></tr>
+<tr><td>OCI</td><td>/30</td><td>3</td><td>网络+网关+广播</td></tr>
+</table>
+
+<h3>3.2 URL 分享 — Nth 位置坐标系统</h3>
+<ul>
+<li>子网用序号 + base36 掩码表示（如 "7k" = 第7个 /20 子网）</li>
+<li>JSON 键名缩短: config_version→v, base_network→b, subnets→s</li>
+<li>LZ-String 压缩为 URL 安全的 base64 字符串</li>
+<li>支持 v1/v2 配置格式的向后兼容</li>
+</ul>
+
+<h2>4. 代码质量问题</h2>
+
+<h3>4.1 安全问题</h3>
+
+<div class="card crit">
+<h3>#1 XSS 漏洞 — note 值未转义 <span class="badge high">高危</span></h3>
+<p>addRow() 通过字符串拼接生成 HTML，note 直接插入 value 属性，未做转义。通过 Import 可注入恶意值。</p>
+<pre>// main.js:305
+'...value="' + note + '"...'</pre>
+<p><strong>建议</strong>: 使用 DOM API 创建元素或对 note 做 HTML 转义。</p>
+</div>
+
+<div class="card warn">
+<h3>#2 Import 无错误处理 <span class="badge med">中危</span></h3>
+<p>JSON.parse 无 try-catch，格式错误的导入内容会导致脚本崩溃。</p>
+<pre>// main.js:145
+importConfig(JSON.parse($('#importExportArea').val()))  // 无 try-catch</pre>
+</div>
+
+<div class="card warn">
+<h3>#3 导入配置无结构校验 <span class="badge med">中危</span></h3>
+<p>importConfig() 不验证传入对象结构，缺少字段时会抛出异常。</p>
+</div>
+
+<h3>4.2 代码质量问题</h3>
+
+<div class="card warn">
+<h3>#4 已废弃的 window.event <span class="badge med">中危</span></h3>
+<p>paste 事件使用了已废弃的 window.event，应改为 e.originalEvent.clipboardData。</p>
+</div>
+
+<div class="card warn">
+<h3>#5 validateSubnetSizes 提前退出无效 <span class="badge med">中危</span></h3>
+<p>内部 validate 函数在 for...in 循环中用 return 试图提前退出，但 return 只跳过当前迭代，不会停止循环。应改用 throw 或标志位。</p>
+</div>
+
+<div class="card">
+<h3>#6 get_join_children 可能返回 undefined <span class="badge low">低危</span></h3>
+<p>该函数所有分支都不返回值时返回 undefined（遗留代码，目前未被调用）。</p>
+</div>
+
+<div class="card">
+<h3>#7 switch 中使用 var <span class="badge low">低危</span></h3>
+<p>多处 switch 中用 var 声明变量，应使用 let/const 避免变量泄漏。</p>
+</div>
+
+<div class="card">
+<h3>#8 rgba2hex 无错误处理 <span class="badge low">低危</span></h3>
+<p>正则匹配失败时 match 返回 null，调用 .slice(1) 会抛异常。</p>
+</div>
+
+<div class="card">
+<h3>#9 遗留变量 subnetNotes <span class="badge low">低危</span></h3>
+<p>第 2 行声明但从未使用，应删除。</p>
+</div>
+
+<h3>4.3 架构问题</h3>
+
+<div class="card">
+<h3>#10 单文件过大 <span class="badge low">低危</span></h3>
+<p>1020 行逻辑集中在 main.js，缺少模块化。建议拆分为：IP工具、树操作、URL编解码、UI渲染、事件绑定。</p>
+</div>
+
+<div class="card">
+<h3>#11 全局状态管理 <span class="badge low">低危</span></h3>
+<p>6 个全局变量管理状态，无状态容器或观察者模式。当前规模可接受，但不利于扩展。</p>
+</div>
+
+<div class="card">
+<h3>#12 HTML 字符串拼接 <span class="badge low">低危</span></h3>
+<p>addRow() 用字符串拼接生成 HTML 而非模板/DOM API，可读性差且有 XSS 风险。</p>
+</div>
+
+<h2>5. 测试覆盖分析</h2>
+<table>
+<tr><th>测试文件</th><th>覆盖范围</th></tr>
+<tr><td>subnet-basic.spec.ts</td><td>基础 split/join、多云模式、note/color 传递</td></tr>
+<tr><td>url-sharing.spec.ts</td><td>URL 编解码、v1/v2 兼容、Reddit 示例</td></tr>
+<tr><td>default-homepage.spec.ts</td><td>默认首页渲染</td></tr>
+<tr><td>ui-usage.spec.ts</td><td>UI 交互流程</td></tr>
+<tr><td>ui-error-handling.spec.ts</td><td>错误处理</td></tr>
+<tr><td>import-export.spec.ts</td><td>导入导出功能</td></tr>
+<tr><td>bug-fixes.spec.ts</td><td>回归测试</td></tr>
+<tr><td>deep-functional.spec.ts</td><td>深度功能测试</td></tr>
+</table>
+<div class="card info">
+<p><strong>测试质量评价:</strong> Playwright E2E 测试覆盖了主要用户流程和边界情况，包含 v1/v2 URL 兼容性测试。但缺少单元测试，所有测试都是端到端的，运行较慢且难以定位问题。</p>
+</div>
+
+<h2>6. 亮点与优势</h2>
+<div class="card good">
+<h3>设计亮点</h3>
+<ul>
+<li><strong>Nth 位置坐标系统</strong> — 创新的子网压缩表示法，使分享 URL 极为紧凑</li>
+<li><strong>多云模式支持</strong> — 自动处理 AWS/Azure/OCI 的保留地址规则，实用性强</li>
+<li><strong>零后端依赖</strong> — 纯前端应用，用户数据不离开浏览器，隐私友好</li>
+<li><strong>配置版本兼容</strong> — v1/v2 向后兼容设计，旧 URL 仍可正常加载</li>
+<li><strong>Docker 安全</strong> — 使用 nginx-unprivileged 非特权用户运行</li>
+<li><strong>无框架依赖</strong> — 轻量级，加载快，维护简单</li>
+<li><strong>SRI 完整性校验</strong> — CDN 资源带 integrity 属性，防篡改</li>
+</ul>
+</div>
+
+<h2>7. 改进建议</h2>
+<div class="card info">
+<h3>短期（安全修复）</h3>
+<ol>
+<li>修复 XSS: addRow() 中对 note 值做 HTML 转义</li>
+<li>Import 添加 try-catch 和用户友好的错误提示</li>
+<li>importConfig() 添加配置结构校验</li>
+<li>替换 window.event 为 e.originalEvent</li>
+<li>修复 validateSubnetSizes 的提前退出逻辑</li>
+</ol>
+</div>
+<div class="card info">
+<h3>中期（代码质量）</h3>
+<ol>
+<li>删除遗留变量 subnetNotes 和未使用函数 get_join_children</li>
+<li>switch 中的 var 替换为 let/const</li>
+<li>rgba2hex 添加输入校验</li>
+<li>addRow() 改用 DOM API 或模板引擎替代字符串拼接</li>
+<li>添加单元测试（IP 转换、树操作、URL 编解码）</li>
+</ol>
+</div>
+<div class="card info">
+<h3>长期（架构优化）</h3>
+<ol>
+<li>将 main.js 拆分为多个模块（ES Modules 或简单命名空间）</li>
+<li>引入 TypeScript 提供类型安全，特别是 subnetMap 的复杂结构</li>
+<li>考虑用 MutationObserver 或状态管理替代全局变量</li>
+<li>renderTable 优化: 增量更新而非全量重建</li>
+<li>考虑用现代框架（如 Preact）替代 jQuery，减少依赖</li>
+</ol>
+</div>
+
+<h2>8. 总结</h2>
+<div class="card info">
+<p>Visual Subnet Calculator 是一个设计精良的轻量级工具，核心算法（Nth 位置坐标系统、嵌套树操作）体现了深入思考。代码功能完整，E2E 测试覆盖良好，Docker 部署安全规范。</p>
+<p>主要改进方向集中在安全加固（XSS 防护、错误处理）和代码现代化（模块化、TypeScript）。对于一个无后端、用户数据不离开浏览器的工具，当前的安全风险实际影响有限，但仍建议修复 XSS 和导入校验问题。</p>
+<p><strong>总体评价: 代码质量良好 (B+)</strong> — 功能完整、设计巧妙，但缺少模块化和安全防护。</p>
+</div>
+
+</div>
+</body>
+</html>
