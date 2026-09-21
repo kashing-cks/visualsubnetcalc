@@ -208,6 +208,56 @@
 
 #calc td.split, #calc td.join {
     padding: 0;
+    cursor: default;
+}
+
+#calc .subnet-block-editor {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    min-width: 7.5rem;
+    padding: 0.25rem;
+}
+
+#calc .subnet-action {
+    border: 0;
+    border-radius: 0.2rem;
+    background: transparent;
+    color: inherit;
+    padding: 0.3rem;
+}
+
+#calc .subnet-action span {
+    writing-mode: horizontal-tb;
+    white-space: nowrap;
+    padding: 0;
+}
+
+#calc .subnet-action:hover {
+    background: #ffffff40;
+}
+
+#calc .block-note {
+    width: 6rem;
+    flex: 1;
+    min-width: 0;
+    border: 1px solid transparent;
+    border-radius: 0.2rem;
+    background: transparent;
+    color: inherit;
+    padding: 0.3rem;
+    font: inherit;
+    cursor: text;
+}
+
+#calc .block-note::placeholder {
+    color: inherit;
+    opacity: 0.6;
+}
+
+#calc .block-note:focus {
+    background: #ffffffcc;
+    outline: 2px solid #175985;
 }
 
 #calc td.split span, #calc td.join span {
@@ -256,6 +306,42 @@
     border: none !important;
     border-color: transparent !important;
     background-color: transparent;
+}
+
+.hierarchy-note-row {
+    display: grid;
+    grid-template-columns: 1.75rem 11rem minmax(8rem, 1fr);
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.25rem 0.5rem calc(0.25rem + var(--note-depth) * 0.75rem);
+    border-bottom: 1px solid #dee2e6;
+}
+
+.hierarchy-note-row label small {
+    display: block;
+    color: #6c757d;
+    font-size: 0.75rem;
+}
+
+.hierarchy-toggle, .hierarchy-leaf {
+    text-align: center;
+    border: 0;
+    border-radius: 0.25rem;
+    background: transparent;
+    color: #1368aa;
+}
+
+.hierarchy-toggle:hover {
+    background: #e9ecef;
+}
+
+@media (max-width: 767px) {
+    .hierarchy-note-row {
+        grid-template-columns: 1.5rem minmax(0, 1fr);
+    }
+    .hierarchy-note-row input {
+        grid-column: 2;
+    }
 }
 
 /* https://stackoverflow.com/a/47245068/606974 */

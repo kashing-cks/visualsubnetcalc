@@ -29,7 +29,7 @@ let infoColumnCount = 5
 //     - Net+0 = Network Address
 //     - Net+1 = OCI Reserved - Default Gateway Address
 //     - Last = Broadcast Address
-let noteTimeout;
+// Huawei Cloud: first two and last three IPs reserved; smallest subnet /28.
 let operatingMode = 'Standard'
 let previousOperatingMode = 'Standard'
 let inflightColor = 'NONE'
@@ -41,6 +41,7 @@ const netsizePatterns = {
     AZURE: '^([12]?[0-9])$',
     AWS: '^(1?[0-9]|2[0-8])$',
     OCI: '^([12]?[0-9]|30)$',
+    HUAWEI: '^(1?[0-9]|2[0-8])$',
 };
 
 const minSubnetSizes = {
@@ -48,7 +49,10 @@ const minSubnetSizes = {
     AZURE: 29,
     AWS: 28,
     OCI: 30,
+    HUAWEI: 28,
 };
+
+const huaweiSubnetDocs = 'https://support.huaweicloud.com/intl/en-us/usermanual-vpc/en-us_topic_0013748726.html'
 
 $('input#network').on('paste', function (e) {
     let pastedData = window.event.clipboardData.getData('text')
@@ -78,8 +82,10 @@ $('#color_palette div').on('click', function() {
 })
 
 $('#calcbody').on('click', '.row_address, .row_range, .row_usable, .row_hosts, .note, input', function(event) {
+    if ($(event.target).closest('.split, .join').length) return
     if (inflightColor !== 'NONE') {
-        mutate_subnet_map('color', this.dataset.subnet, '', inflightColor)
+        const cidr = $(this).closest('tr').find('.row_address')[0].dataset.subnet
+        mutate_subnet_map('color', cidr, '', inflightColor)
         // We could re-render here, but there is really no point, keep performant and just change the background color now
         //renderTable();
         $(this).closest('tr').css('background-color', inflightColor)
@@ -144,6 +150,139 @@ $('#dropdown_oci').click(function() {
 $('#importBtn').on('click', function() {
     importConfig(JSON.parse($('#importExportArea').val()))
 })
+
+$('#dropdown_huawei').on('click', function(event) {
+    event.preventDefault()
+    previousOperatingMode = operatingMode
+    operatingMode = 'HUAWEI'
+    if (!switchMode(operatingMode)) {
+        operatingMode = previousOperatingMode
+    }
+})
+
+function generateSaveFilename(baseNetworkCidr) {
+    return baseNetworkCidr.replace('/', '_') + '.json'
+}
+
+function downloadJSONFile(jsonString, filename) {
+    const blob = new Blob([jsonString], { type: 'application/json' })
+    const objectURL = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = objectURL
+    anchor.download = filename
+    document.body.appendChild(anchor)
+    anchor.click()
+    document.body.removeChild(anchor)
+    URL.revokeObjectURL(objectURL)
+}
+
+$('#saveBtn').on('click', function() {
+    try {
+        const config = exportConfig(false)
+        const jsonString = JSON.stringify(config, null, 2)
+        const filename = generateSaveFilename(config.base_network)
+        downloadJSONFile(jsonString, filename)
+    } catch (e) {
+        show_warning_modal('<div>The file download was blocked by your browser. Please check your browser\'s download settings, or copy the JSON from the text area above and save it manually.</div>')
+    }
+})
+
+$('#btn_export_excel').on('click', function(event) {
+    event.preventDefault()
+    try {
+        const workbook = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(workbook, buildExcelSubnetSheet(), 'Subnets')
+        XLSX.utils.book_append_sheet(workbook, buildExcelNotesSheet(), 'Hierarchy Notes')
+        const filename = Object.keys(subnetMap)[0].replace('/', '_') + '.xlsx'
+        XLSX.writeFile(workbook, filename)
+    } catch (e) {
+        show_warning_modal('<div>Unable to export the Excel file. Please reload the page and try again, and check your connection and browser download settings.</div>')
+    }
+})
+
+function excelCell(value, background = 'FFFFFF', bold = false) {
+    const edge = { style: 'thin', color: { rgb: 'D0D7DE' } }
+    return {
+        t: typeof value === 'number' ? 'n' : 's', v: value,
+        s: {
+            fill: { patternType: 'solid', fgColor: { rgb: background } },
+            font: { name: 'Calibri', sz: 11, bold },
+            alignment: { vertical: 'center', wrapText: true },
+            border: { top: edge, bottom: edge, left: edge, right: edge }
+        }
+    }
+}
+
+function excelBackground(element) {
+    const color = getComputedStyle(element).backgroundColor
+    if (color === 'transparent' || color === 'rgba(0, 0, 0, 0)') return 'FFFFFF'
+    return rgba2hex(color).slice(1, 7).toUpperCase()
+}
+
+function buildExcelSubnetSheet() {
+    const sheet = { '!merges': [], '!rows': [{ hpt: 30 }] }
+    const headers = ['Subnet Address', 'Range of Addresses', $('#useableHeader').text(), 'Hosts', 'Note']
+    headers.forEach((value, c) => { sheet[XLSX.utils.encode_cell({ r: 0, c })] = excelCell(value, 'E9ECEF', true) })
+    let lastColumn = 5
+    // Keep one Excel column per tree level. The HTML Split colspan also includes
+    // infoColumnCount layout-only columns, which must not become Excel columns.
+    // Covered cells are also styled so merged ranges keep their complete fill/border.
+    document.querySelectorAll('#calcbody tr').forEach((row, index) => {
+        const r = index + 1
+        let c = 0
+        sheet['!rows'][r] = { hpt: 45 }
+        for (const cell of row.cells) {
+            while (sheet[XLSX.utils.encode_cell({ r, c })]) c++
+            const treeCell = cell.matches('.split, .join')
+            const columnSpan = cell.matches('.split') ? Math.max(1, cell.colSpan - infoColumnCount) : cell.colSpan
+            const note = cell.querySelector('input.leaf-note')
+            let value = note ? note.value : cell.textContent.trim()
+            if (cell.matches('.row_hosts')) value = Number(value)
+            if (treeCell) {
+                const node = getSubnetNode(cell.dataset.subnet)
+                value = (cell.matches('.split') ? 'Split /' : 'Join /') + cell.dataset.subnet.split('/')[1]
+                if (node && node._note) value += '\n' + node._note
+            }
+            const background = excelBackground(treeCell ? cell : row)
+            for (let dr = 0; dr < cell.rowSpan; dr++) {
+                for (let dc = 0; dc < columnSpan; dc++) {
+                    sheet[XLSX.utils.encode_cell({ r: r + dr, c: c + dc })] = excelCell(dr || dc ? '' : value, background)
+                }
+            }
+            if (cell.rowSpan > 1 || columnSpan > 1) {
+                sheet['!merges'].push({ s: { r, c }, e: { r: r + cell.rowSpan - 1, c: c + columnSpan - 1 } })
+            }
+            c += columnSpan
+            lastColumn = Math.max(lastColumn, c - 1)
+        }
+    })
+    for (let c = 5; c <= lastColumn; c++) {
+        sheet[XLSX.utils.encode_cell({ r: 0, c })] = excelCell(c === 5 ? 'Split / Join' : '', 'E9ECEF', true)
+    }
+    if (lastColumn > 5) sheet['!merges'].push({ s: { r: 0, c: 5 }, e: { r: 0, c: lastColumn } })
+    sheet['!cols'] = [{ wch: 20 }, { wch: 38 }, { wch: 38 }, { wch: 12 }, { wch: 40 }]
+        .concat(Array.from({ length: lastColumn - 4 }, () => ({ wch: 12 })))
+    sheet['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: document.querySelectorAll('#calcbody tr').length, c: lastColumn } })
+    return sheet
+}
+
+function buildExcelNotesSheet() {
+    const rows = [['Level', 'Subnet Address', 'Parent Subnet', 'Note']]
+    function visit(tree, parent = '', depth = 0) {
+        for (const cidr of Object.keys(tree)) {
+            if (cidr.startsWith('_')) continue
+            rows.push([depth, cidr, parent, tree[cidr]._note || ''])
+            visit(tree[cidr], cidr, depth + 1)
+        }
+    }
+    visit(sortIPCIDRs(subnetMap))
+    const sheet = XLSX.utils.aoa_to_sheet(rows)
+    rows.forEach((row, r) => row.forEach((value, c) => {
+        sheet[XLSX.utils.encode_cell({ r, c })] = excelCell(value, r ? 'FFFFFF' : 'E9ECEF', r === 0)
+    }))
+    sheet['!cols'] = [{ wch: 10 }, { wch: 22 }, { wch: 22 }, { wch: 60 }]
+    return sheet
+}
 
 $('#bottom_nav #colors_word_open').on('click', function() {
     $('#bottom_nav #color_palette').removeClass('d-none');
@@ -223,28 +362,92 @@ function isMatchingSize(subnet1, subnet2) {
     return subnet1.split('/')[1] === subnet2.split('/')[1];
 }
 
-$('#calcbody').on('click', 'td.split,td.join', function(event) {
+$('#calcbody').on('click', '.subnet-action', function(event) {
+    const cell = this.closest('td')
     // HTML DOM Data elements! Yay! See the `data-*` attributes of the HTML tags
-    mutate_subnet_map(this.dataset.mutateVerb, this.dataset.subnet, '')
-    this.dataset.subnet = sortIPCIDRs(this.dataset.subnet)
+    mutate_subnet_map(cell.dataset.mutateVerb, cell.dataset.subnet, '')
     renderTable(operatingMode);
 })
 
-$('#calcbody').on('keyup', 'td.note input', function(event) {
-    // HTML DOM Data elements! Yay! See the `data-*` attributes of the HTML tags
-    let delay = 1000;
-    clearTimeout(noteTimeout);
-    noteTimeout = setTimeout(function(element) {
-        mutate_subnet_map('note', element.dataset.subnet, '', element.value)
-    }, delay, this);
+$('#calcbody').on('input', 'td.note input, input.block-note', updateNoteEditors)
+
+$('#hierarchyNotesModal').on('show.bs.modal', function() {
+    renderHierarchyNotes()
 })
 
-$('#calcbody').on('focusout', 'td.note input', function(event) {
-    // HTML DOM Data elements! Yay! See the `data-*` attributes of the HTML tags
-    clearTimeout(noteTimeout);
+$('#hierarchy_notes_tree').on('input', 'input', updateNoteEditors)
+
+function updateNoteEditors() {
     mutate_subnet_map('note', this.dataset.subnet, '', this.value)
+    const subnet = this.dataset.subnet
+    const value = this.value
+    $('#calcbody input.leaf-note, #calcbody input.block-note, #hierarchy_notes_tree input').each(function() {
+        if (this.dataset.subnet === subnet) this.value = value
+    })
+}
+
+function subnetBlockEditor(cidr, verb, note) {
+    return '<div class="subnet-block-editor"><button type="button" class="subnet-action" aria-label="' +
+        verb + ' ' + cidr + '" title="' + verb + ' ' + cidr + '">' +
+        '<span>/' + cidr.split('/')[1] + '</span></button>' +
+        '<input type="text" class="block-note" data-subnet="' + cidr +
+        '" aria-label="' + cidr + ' ' + verb + ' Note" placeholder="Note" value="' + escapeHtml(note) + '"></div>'
+}
+
+$('#hierarchy_notes_tree').on('click', '.hierarchy-toggle', function() {
+    const expanded = this.getAttribute('aria-expanded') === 'true'
+    this.setAttribute('aria-expanded', String(!expanded))
+    this.textContent = expanded ? '▸' : '▾'
+    document.getElementById(this.getAttribute('aria-controls')).hidden = expanded
 })
 
+function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, char => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[char])
+}
+
+function getSubnetNode(cidr, tree = subnetMap) {
+    for (const key of Object.keys(tree)) {
+        if (key.startsWith('_')) continue
+        if (key === cidr) return tree[key]
+        const found = getSubnetNode(cidr, tree[key])
+        if (found) return found
+    }
+}
+
+function renderHierarchyNotes() {
+    const container = document.getElementById('hierarchy_notes_tree')
+    container.replaceChildren()
+    let id = 0
+    function visit(tree, target, depth) {
+        for (const cidr of Object.keys(tree)) {
+            if (cidr.startsWith('_')) continue
+            const node = tree[cidr]
+            const branch = has_network_sub_keys(node)
+            const row = document.createElement('div')
+            row.className = 'hierarchy-note-row'
+            row.style.setProperty('--note-depth', Math.min(depth, 6))
+            const inputId = 'hierarchy-note-' + id++
+            const childrenId = inputId + '-children'
+            row.innerHTML = (branch
+                ? '<button type="button" class="hierarchy-toggle" aria-label="Toggle ' + cidr + '" aria-expanded="true" aria-controls="' + childrenId + '">▾</button>'
+                : '<span class="hierarchy-leaf" aria-hidden="true">·</span>') +
+                '<label for="' + inputId + '" class="font-monospace">' + cidr +
+                '<small>' + (branch ? 'Parent' : 'Subnet') + ' · Level ' + depth + '</small></label>' +
+                '<input id="' + inputId + '" class="form-control form-control-sm" type="text" aria-label="' + cidr + ' Hierarchy Note" data-subnet="' + cidr + '">'
+            row.querySelector('input').value = node._note || ''
+            target.appendChild(row)
+            if (branch) {
+                const children = document.createElement('div')
+                children.id = childrenId
+                target.appendChild(children)
+                visit(node, children, depth + 1)
+            }
+        }
+    }
+    visit(sortIPCIDRs(subnetMap), container, 0)
+}
 
 function renderTable(operatingMode) {
     // TODO: Validation Code
@@ -279,7 +482,7 @@ function addRow(network, netSize, colspan, note, notesWidth, color, operatingMod
     let addressFirst = ip2int(network)
     let addressLast = subnet_last_address(addressFirst, netSize)
     let usableFirst = subnet_usable_first(addressFirst, netSize, operatingMode)
-    let usableLast = subnet_usable_last(addressFirst, netSize)
+    let usableLast = subnet_usable_last(addressFirst, netSize, operatingMode)
     let hostCount = 1 + usableLast - usableFirst
     let styleTag = ''
     if (color !== '') {
@@ -302,8 +505,8 @@ function addRow(network, netSize, colspan, note, notesWidth, color, operatingMod
         '                <td data-subnet="' + rowCIDR + '" aria-labelledby="' + rowId + ' rangeHeader" class="row_range">' + rangeCol + '</td>\n' +
         '                <td data-subnet="' + rowCIDR + '" aria-labelledby="' + rowId + ' useableHeader" class="row_usable">' + usableCol + '</td>\n' +
         '                <td data-subnet="' + rowCIDR + '" aria-labelledby="' + rowId + ' hostsHeader" class="row_hosts">' + hostCount + '</td>\n' +
-        '                <td class="note" style="width:' + notesWidth + '"><label><input aria-labelledby="' + rowId + ' noteHeader" type="text" class="form-control shadow-none p-0" data-subnet="' + rowCIDR + '" value="' + note + '"></label></td>\n' +
-        '                <td data-subnet="' + rowCIDR + '" aria-labelledby="' + rowId + ' splitHeader" rowspan="1" colspan="' + colspan + '" class="split rotate" data-mutate-verb="split"><span>/' + netSize + '</span></td>\n'
+        '                <td class="note" style="width:' + notesWidth + '"><label><input aria-labelledby="' + rowId + ' noteHeader" type="text" class="leaf-note form-control shadow-none p-0" data-subnet="' + rowCIDR + '" value="' + escapeHtml(note) + '"></label></td>\n' +
+        '                <td data-subnet="' + rowCIDR + '" aria-labelledby="' + rowId + ' splitHeader" rowspan="1" colspan="' + colspan + '" class="split" data-mutate-verb="split">' + subnetBlockEditor(rowCIDR, 'Split', note) + '</td>\n'
     if (netSize > maxNetSize) {
         // This is wrong. Need to figure out a way to get the number of children so you can set rowspan and the number
         // of ancestors so you can set colspan.
@@ -314,7 +517,7 @@ function addRow(network, netSize, colspan, note, notesWidth, color, operatingMod
         for (const i in matchingNetworkList) {
             let matchingNetwork = matchingNetworkList[i]
             let networkChildrenCount = count_network_children(matchingNetwork, subnetMap, [])
-            newRow += '                <td aria-label="' + matchingNetwork + ' Join" rowspan="' + networkChildrenCount + '" colspan="1" class="join rotate" data-subnet="' + matchingNetwork + '" data-mutate-verb="join"><span>/' + matchingNetwork.split('/')[1] + '</span></td>\n'
+            newRow += '                <td aria-label="' + matchingNetwork + ' Join" rowspan="' + networkChildrenCount + '" colspan="1" class="join" data-subnet="' + matchingNetwork + '" data-mutate-verb="join">' + subnetBlockEditor(matchingNetwork, 'Join', getSubnetNode(matchingNetwork)._note || '') + '</td>\n'
         }
     }
     newRow += '            </tr>';
@@ -441,6 +644,7 @@ function subnet_usable_first(network, netSize, operatingMode) {
                 return network + 4;
                 break;
             case 'OCI':
+            case 'HUAWEI':
                 return network + 2;
                 break;
             default:
@@ -452,10 +656,10 @@ function subnet_usable_first(network, netSize, operatingMode) {
     }
 }
 
-function subnet_usable_last(network, netSize) {
+function subnet_usable_last(network, netSize, mode = 'Standard') {
     let last_address = subnet_last_address(network, netSize);
     if (netSize < 31) {
-        return last_address - 1;
+        return last_address - (mode === 'HUAWEI' ? 3 : 1);
     } else {
         return last_address;
     }
@@ -554,6 +758,7 @@ function get_consolidated_property(subnetTree, property) {
 function get_property_values(subnetTree, property) {
     let propValues = []
     for (let mapKey in subnetTree) {
+        if (mapKey.startsWith('_')) continue
         if (has_network_sub_keys(subnetTree[mapKey])) {
             propValues.push.apply(propValues, get_property_values(subnetTree[mapKey], property))
         } else {
@@ -597,14 +802,11 @@ function mutate_subnet_map(verb, network, subnetTree, propValue = '') {
                     // Could maybe optimize this for readability with some null coalescing
                     subnetTree[mapKey][new_networks[0]] = {}
                     subnetTree[mapKey][new_networks[1]] = {}
-                    // Options:
-                    //   [ Selected ] Copy note to both children and delete parent note
-                    //   [ Possible ] Blank out the new and old subnet notes
+                    // Children inherit the initial note, while the parent keeps its own note.
                     if (subnetTree[mapKey].hasOwnProperty('_note')) {
                         subnetTree[mapKey][new_networks[0]]['_note'] = subnetTree[mapKey]['_note']
                         subnetTree[mapKey][new_networks[1]]['_note'] = subnetTree[mapKey]['_note']
                     }
-                    delete subnetTree[mapKey]['_note']
                     if (subnetTree[mapKey].hasOwnProperty('_color')) {
                         subnetTree[mapKey][new_networks[0]]['_color'] = subnetTree[mapKey]['_color']
                         subnetTree[mapKey][new_networks[1]]['_color'] = subnetTree[mapKey]['_color']
@@ -612,6 +814,9 @@ function mutate_subnet_map(verb, network, subnetTree, propValue = '') {
                     delete subnetTree[mapKey]['_color']
                 } else {
                     switch (operatingMode) {
+                        case 'HUAWEI':
+                            var modal_error_message = 'The minimum IPv4 subnet size for Huawei Cloud is /28.<br/><a href="' + huaweiSubnetDocs + '" target="_blank" rel="noopener noreferrer">Huawei Cloud subnet documentation</a>'
+                            break;
                         case 'AWS':
                             var modal_error_message = 'The minimum IPv4 subnet size for AWS is /' + minSubnetSizes[operatingMode] + '.<br/><br/>More Information:<br/><a href="https://docs.aws.amazon.com/vpc/latest/userguide/subnet-sizing.html#subnet-sizing-ipv4" target="_blank" rel="noopener noreferrer">Amazon Virtual Private Cloud > User Guide > Subnet CIDR Blocks > Subnet Sizing for IPv4</a>'
                             break;
@@ -628,13 +833,9 @@ function mutate_subnet_map(verb, network, subnetTree, propValue = '') {
                     show_warning_modal('<div>' + modal_error_message + '</div>')
                 }
             } else if (verb === 'join') {
-                // Options:
-                //   [ Selected ] Keep note if all the notes are the same, blank them out if they differ. Most intuitive
-                //   [ Possible ] Lose note data for all deleted subnets.
-                //   [ Possible ] Keep note from first subnet in the join scope. Reasonable but I think rarely will the note be kept by the user
-                //   [ Possible ] Concatenate all notes. Ugly and won't really be useful for more than two subnets being joined
+                // Restore this level's note; legacy trees without one consolidate leaf notes.
                 subnetTree[mapKey] = {
-                    '_note': get_consolidated_property(subnetTree[mapKey], '_note'),
+                    '_note': subnetTree[mapKey]['_note'] ?? get_consolidated_property(subnetTree[mapKey], '_note'),
                     '_color': get_consolidated_property(subnetTree[mapKey], '_color')
                 }
             } else if (verb === 'note') {
@@ -663,6 +864,9 @@ function switchMode(operatingMode) {
             $('#input_form').rules('remove', 'netsize');
 
             switch (operatingMode) {
+                case 'HUAWEI':
+                    var validate_error_message = 'Huawei Cloud Mode - Smallest size is /28'
+                    break;
                 case 'AWS':
                     var validate_error_message = 'AWS Mode - Smallest size is /' + minSubnetSizes[operatingMode]
                     break;
@@ -688,11 +892,14 @@ function switchMode(operatingMode) {
                 }
             });
             // Remove active class from all buttons if needed
-            $('#dropdown_standard, #dropdown_azure, #dropdown_aws, #dropdown_oci').removeClass('active');
+            $('#dropdown_standard, #dropdown_azure, #dropdown_aws, #dropdown_oci, #dropdown_huawei').removeClass('active');
             $('#dropdown_' + operatingMode.toLowerCase()).addClass('active');
             isSwitched = true;
         } else {
             switch (operatingMode) {
+                case 'HUAWEI':
+                    var modal_error_message = 'One or more subnets are smaller than the minimum allowed for Huawei Cloud.<br/>The smallest size allowed is /28.<br/><a href="' + huaweiSubnetDocs + '" target="_blank" rel="noopener noreferrer">Huawei Cloud subnet documentation</a>'
+                    break;
                 case 'AWS':
                     var modal_error_message = 'One or more subnets are smaller than the minimum allowed for AWS.<br/>The smallest size allowed is /' + minSubnetSizes[operatingMode] + '.<br/>See: <a href="https://docs.aws.amazon.com/vpc/latest/userguide/subnet-sizing.html#subnet-sizing-ipv4" target="_blank" rel="noopener noreferrer">Amazon Virtual Private Cloud > User Guide > Subnet CIDR Blocks > Subnet Sizing for IPv4</a>'
                     break;
@@ -741,6 +948,9 @@ function validateSubnetSizes(subnetMap, minSubnetSize) {
 
 function set_usable_ips_title(operatingMode) {
     switch (operatingMode) {
+        case 'HUAWEI':
+            $('#useableHeader').html('Usable IPs (<a href="' + huaweiSubnetDocs + '" target="_blank" rel="noopener noreferrer" style="color:#000; border-bottom:1px dotted #000; text-decoration:dotted" data-bs-toggle="tooltip" data-bs-placement="top" title="Huawei Cloud reserves 5 addresses per subnet by default: the first two and the last three. Custom gateway settings may change reserved addresses.">Huawei Cloud</a>)')
+            break;
         case 'AWS':
             $('#useableHeader').html('Usable IPs (<a href="https://docs.aws.amazon.com/vpc/latest/userguide/subnet-sizing.html#subnet-sizing-ipv4" target="_blank" rel="noopener noreferrer" style="color:#000; border-bottom: 1px dotted #000; text-decoration: dotted" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-html="true" title="AWS reserves 5 addresses in each subnet for platform use.<br/>Click to navigate to the AWS documentation.">AWS</a>)')
             break;
@@ -922,13 +1132,12 @@ function expandSubnetMap(expandedMap, miniMap, baseNetwork) {
         expandedMap[subnetKey] = {}
         if (has_network_sub_keys(miniMap[mapKey])) {
             expandSubnetMap(expandedMap[subnetKey], miniMap[mapKey], baseNetwork)
-        } else {
-            if (miniMap[mapKey].hasOwnProperty('n')) {
-                expandedMap[subnetKey]['_note'] = miniMap[mapKey]['n']
-            }
-            if (miniMap[mapKey].hasOwnProperty('c')) {
-                expandedMap[subnetKey]['_color'] = miniMap[mapKey]['c']
-            }
+        }
+        if (miniMap[mapKey].hasOwnProperty('n')) {
+            expandedMap[subnetKey]['_note'] = miniMap[mapKey]['n']
+        }
+        if (miniMap[mapKey].hasOwnProperty('c')) {
+            expandedMap[subnetKey]['_color'] = miniMap[mapKey]['c']
         }
     }
 }

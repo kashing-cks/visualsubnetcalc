@@ -108,8 +108,10 @@
                         <li><a class="dropdown-item" href="#" data-bs-toggle="operatingMode" data-bs-target="#operatingMode" id="dropdown_aws">Mode - AWS</a></li>
                         <li><a class="dropdown-item" href="#" data-bs-toggle="operatingMode" data-bs-target="#operatingMode" id="dropdown_azure">Mode - Azure</a></li>
                         <li><a class="dropdown-item" href="#" data-bs-toggle="operatingMode" data-bs-target="#operatingMode" id="dropdown_oci">Mode - OCI</a></li>
+                        <li><a class="dropdown-item" href="#" data-bs-toggle="operatingMode" data-bs-target="#operatingMode" id="dropdown_huawei">Mode - Huawei Cloud</a></li>
                         <li><hr class="dropdown-divider"></li>
                         <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#importExportModal" id="btn_import_export">Import / Export</a></li>
+                        <li><a class="dropdown-item" href="#" id="btn_export_excel">Export to Excel</a></li>
                     </ul>
                 </div>
             </div>
@@ -118,6 +120,10 @@
 
 
 
+    <div class="d-flex justify-content-end mb-2">
+        <button type="button" id="btn_hierarchy_notes" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#hierarchyNotesModal">Hierarchy Notes</button>
+    </div>
+    <div class="table-responsive">
     <table id="calc" class="table table-bordered font-monospace" aria-label="Subnet Table">
         <thead>
             <tr>
@@ -143,6 +149,7 @@
             </tr>
         </tbody>
     </table>
+    </div>
     <div id="bottom_nav">
         <div class="d-inline-block align-top pt-1" id="colors_word_open" aria-label="Change Colors"><span>Change Colors &#187;</span></div>
         <div class="d-inline-block d-none" id="color_palette" aria-label="Color Palette">
@@ -164,6 +171,24 @@
         </div>
     </div>
 
+
+    <div class="modal fade" id="hierarchyNotesModal" tabindex="-1" aria-labelledby="hierarchyNotesTitle" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 class="modal-title fs-5" id="hierarchyNotesTitle">Hierarchy Notes</h3>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-secondary small">Edit each subnet once. Use the arrows to collapse branches. Changes apply immediately to the current design.</p>
+                    <div id="hierarchy_notes_tree"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Done</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <div class="modal fade" id="notifyModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-md">
@@ -198,6 +223,7 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                     <button type="button" class="btn btn-primary" data-bs-dismiss="modal" id="importBtn">Import</button>
+                    <button type="button" class="btn btn-success" id="saveBtn">Save</button>
                 </div>
             </div>
         </div>
@@ -284,6 +310,9 @@
             integrity="sha384-YJxXUyJ0BogsbWMDJj4h3uJVyImZsAI6qh7MG2LGgxMstOXB8G1mNwaRuL4A6VYb"
             crossorigin="anonymous"></script>
     <script src="js/lz-string.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"
+            integrity="sha384-OUW9euuUyxyHcAhTqbhI+Iyb8LMssXt/cpz0yXhs9UWG2/R/uaWdakx/4cfww7Vb"
+            crossorigin="anonymous"></script>
     <script src="js/main.js"></script>
 </div>
 </body>

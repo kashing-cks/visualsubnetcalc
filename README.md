@@ -19,6 +19,37 @@ should align to these tenets, or propose an adjustment to the tenets.
 - **Embrace community contributions.** Consider and respond to all feedback and pull requests in the context of these
   tenets.
 
+## Website Deployment
+
+GitHub Actions publishes the `dist` directory to GitHub Pages on each push to `main`.
+In repository **Settings → Pages**, select **GitHub Actions** as the source.
+The website URL is https://kashing-cks.github.io/visualsubnetcalc/ once Pages is enabled
+and the deployment completes.
+
+## Export to Excel
+
+Choose **Tools → Export to Excel** to download the current subnet table as an `.xlsx` file
+(for example, `10.0.0.0_16.xlsx`). The workbook includes subnet addresses, address ranges,
+usable IPs for the selected mode, numeric host counts, and notes.
+The **Subnets** sheet preserves row highlight colors and the orange Split / blue Join
+blocks with merged cells. **Hierarchy Notes** lists every subnet and its parent, level,
+and independent note.
+
+## Notes at Each Level
+
+The main table's Note column shows only the current subnet note. Click **Hierarchy Notes**
+or edit directly inside the orange Split and blue Join blocks. The horizontal prefix
+button performs the split/join action; typing in the adjacent note does not change
+the subnet structure. Leaf notes stay synchronized with the Note column.
+Use **Hierarchy Notes**
+above the table to edit all levels in a scrollable panel. Each subnet appears once,
+with its level and a collapsible branch; edits apply immediately to the current design.
+Splitting keeps the
+parent note and initially copies it to both children; each level can then be edited
+independently. Joining restores the parent's note (older configurations without a
+parent note use matching child notes). JSON export/import and shareable URLs retain
+all levels of notes.
+
 ## Cloud Subnet Notes
 
 ### Standard mode:
@@ -55,6 +86,16 @@ should align to these tenets, or propose an adjustment to the tenets.
   - Network Address (network + 0)
   - OCI Reserved - Default Gateway Address (network + 1)
   - Broadcast Address (last network address)
+
+### Huawei Cloud mode ([docs](https://support.huaweicloud.com/intl/en-us/usermanual-vpc/en-us_topic_0013748726.html)):
+
+- Choose **Tools → Mode - Huawei Cloud**.
+- Smallest subnet: /28.
+- Five addresses are reserved by default: network address, gateway (network + 1),
+  system interface (last - 2), DHCP (last - 1), and broadcast (last).
+- For `192.168.0.0/24`, usable addresses are `192.168.0.2 - 192.168.0.252` (251 hosts).
+- Calculations use the default gateway layout; custom gateway settings can change
+  the reserved addresses, as described in Huawei Cloud's documentation.
 
 ## Building From Source
 
