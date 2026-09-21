@@ -8,6 +8,7 @@ let tableWidthReference = 0
 const defaultBlockColors = { split: '#f27f64', join: '#6fb0d6' }
 let blockColors = { ...defaultBlockColors }
 let colorLegend = new Map()
+let inactiveColorMeanings = new Map()
 const colorUndo = []
 let paintStroke = null
 let quickColorCell = null
@@ -19,10 +20,11 @@ function recordColor(color) {
     if (!validColor(color)) return
     const key = color.toLowerCase()
     if (colorLegend.has(key)) return
-    colorLegend.set(key, '')
+    const meaning = inactiveColorMeanings.get(key) || ''
+    colorLegend.set(key, meaning)
     // The legend sits above the table: defer new rows until a paint stroke ends
     // so revealing it cannot move cells away from the pointer mid-drag.
-    if (!paintStroke) appendColorLegendRow(key, '')
+    if (!paintStroke) appendColorLegendRow(key, meaning)
 }
 
 function appendColorLegendRow(color, meaning) {
@@ -51,19 +53,33 @@ function appendColorLegendRow(color, meaning) {
 }
 
 function collectDesignColors() {
-    // Include colors from older saved designs that have no legend yet.
-    function visit(tree) {
-        for (const [cidr, node] of Object.entries(tree)) {
-            if (cidr.startsWith('_')) continue
-            recordColor(node._color)
-            for (const key of [...infoCellKeys, 'block']) recordColor(node._cellColors?.[key])
-            visit(node)
+    // Keep only effective colors of currently rendered cells, not hidden parent
+    // metadata, overridden row colors or a Join default with no Join cells.
+    if (paintStroke) return
+    const used = new Set()
+    document.querySelectorAll('#calcbody td').forEach(cell => {
+        const node = getSubnetNode(cell.dataset.subnet)
+        if (!node) return
+        const key = infoCellKeys.find(key => cell.classList.contains(key))
+        const override = node._cellColors?.[key || 'block']
+        let color = validColor(override) ? override : key ? node._color : null
+        if (!key && !validColor(override)) {
+            const kind = cell.classList.contains('split') ? 'split' : 'join'
+            if (blockColors[kind].toLowerCase() !== defaultBlockColors[kind]) color = blockColors[kind]
+        }
+        if (validColor(color)) used.add(color.toLowerCase())
+    })
+    for (const [color, meaning] of colorLegend) {
+        if (!used.has(color)) {
+            inactiveColorMeanings.set(color, meaning)
+            colorLegend.delete(color)
         }
     }
-    visit(subnetMap)
-    for (const kind of ['split', 'join']) {
-        if (blockColors[kind].toLowerCase() !== defaultBlockColors[kind]) recordColor(blockColors[kind])
-    }
+    document.querySelectorAll('#color_legend_rows tr').forEach(row => {
+        if (!used.has(row.dataset.color)) row.remove()
+    })
+    used.forEach(recordColor)
+    document.getElementById('color_legend').hidden = colorLegend.size === 0
 }
 
 function textColor(background) {
@@ -92,6 +108,7 @@ function refreshColors() {
             cell.style.color = textColor(background)
         }
     })
+    collectDesignColors()
 }
 
 function rememberColorChange(changes) {
@@ -102,7 +119,6 @@ function rememberColorChange(changes) {
 }
 
 function applyPaint(cell, color, scope, changes) {
-    recordColor(color)
     const key = infoCellKeys.find(key => cell.classList.contains(key))
     const cidr = cell.dataset.subnet
     const node = getSubnetNode(cidr)
@@ -258,10 +274,7 @@ function finishPaintStroke() {
     if (paintStroke) rememberColorChange(paintStroke.changes)
     paintStroke = null
     document.body.classList.remove('painting-cells')
-    const visibleColors = new Set(Array.from(document.querySelectorAll('#color_legend_rows tr'), row => row.dataset.color))
-    colorLegend.forEach((meaning, color) => {
-        if (!visibleColors.has(color)) appendColorLegendRow(color, meaning)
-    })
+    collectDesignColors()
 }
 document.addEventListener('pointerup', finishPaintStroke)
 document.addEventListener('pointercancel', finishPaintStroke)
@@ -285,7 +298,7 @@ $('#split_color, #join_color').on('input', function() {
 })
 $('#split_color, #join_color').on('change', function() {
     // Record the committed choice, not every intermediate native-picker shade.
-    recordColor(this.value)
+    collectDesignColors()
     const previous = previousBlockColor
     if (previous && JSON.stringify(previous) !== JSON.stringify(blockColors)) rememberColorChange([() => { blockColors = previous }])
     previousBlockColor = null
@@ -795,7 +808,6 @@ function renderTable(operatingMode) {
     addRowTree(subnetMap, 0, maxDepth, operatingMode)
     renderTableColumns(maxDepth)
     refreshColors()
-    collectDesignColors()
 }
 
 function renderTableColumns(maxDepth) {
@@ -1634,6 +1646,7 @@ function renameKey(obj, oldKey, newKey) {
 }
 
 function importConfig(text) {
+    inactiveColorMeanings = new Map()
     colorLegend = new Map()
     document.getElementById('color_legend_rows').replaceChildren()
     document.getElementById('color_legend').hidden = true

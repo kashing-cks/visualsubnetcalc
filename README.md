@@ -78,10 +78,13 @@ button to finish. The action bar and palette wrap to fit smaller screens.
 Applying a row/cell color or committing a Split/Join color automatically adds it to
 the **Color usage & meanings** table above the subnet table, beneath the color controls. Each color appears once;
 enter its meaning (for example Production, DMZ or Reserved) directly beside the swatch.
-Selecting a brush without painting does not add a record. Previous colors and their
-descriptions remain after repainting or undoing, so the table doubles as a color history.
-Importing a design replaces the history with that design's legend; older designs
-automatically collect their existing custom colors. Default untouched block colors
+Selecting a brush without painting does not add a record. Unused colors are removed
+automatically after repainting, clearing, undoing or joining; an empty legend is hidden.
+Only effective colors in the current table count, so overridden colors and hidden parent
+metadata do not keep unused entries alive. Reusing a color in the same session restores
+its previous description. JSON, shareable links and Excel include only currently used colors.
+Importing a design replaces the legend; older designs automatically collect their
+visible custom colors. Default untouched block colors
 are not added. JSON and shareable links preserve the legend; Excel includes
 color swatches and meanings below the subnet table in the same **Subnets** sheet
 whenever there are recorded colors.
