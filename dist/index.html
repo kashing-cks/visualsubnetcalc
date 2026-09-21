@@ -46,7 +46,7 @@
                 <path d="m8.93 6.588-2.29.287-.082.38.45.083c.294.07.352.176.288.469l-.738 3.468c-.194.897.105 1.319.808 1.319.545 0 1.178-.252 1.465-.598l.088-.416c-.2.176-.492.246-.686.246-.275 0-.375-.193-.304-.533L8.93 6.588zM9 4.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0z"/>
             </svg>
         </a>
-        <a href="https://github.com/ckabalan/visualsubnetcalc" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
+        <a href="https://github.com/kashing-cks/visualsubnetcalc" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
             <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" fill="currentColor" class="bi bi-github" viewBox="0 0 16 16">
               <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
             </svg>
@@ -120,10 +120,24 @@
 
 
     <div id="table_colors" class="mb-3">
+        <div class="design-actions">
+            <button type="button" class="btn btn-primary action-button" id="copy_url">
+                <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>
+                <span>Copy Shareable URL</span>
+            </button>
         <button type="button" class="btn btn-outline-secondary action-button" id="colors_word_open" aria-label="Change Colors" aria-expanded="false" aria-controls="color_panel">
             <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1-4 2 2 0 0 1 1-4h3a3 3 0 0 0 3-3c0-4-4-7-9-7Z"/><circle cx="7" cy="10" r="1"/><circle cx="11" cy="7" r="1"/><circle cx="16" cy="8" r="1"/></svg>
             <span>Change Colors &#187;</span>
         </button>
+        </div>
+        <p id="share_status" class="small mb-0" role="status" aria-live="polite"></p>
+        <div id="share_fallback" class="share-fallback" hidden>
+            <label for="share_url" class="form-label">Shareable URL — select and copy this link</label>
+            <div class="d-flex gap-2">
+                <input id="share_url" type="text" class="form-control" readonly spellcheck="false">
+                <button id="select_share_url" type="button" class="btn btn-outline-primary">Select link</button>
+            </div>
+        </div>
         <div id="color_panel" class="color-panel" hidden>
             <div class="color-panel-heading">
                 <div><strong>Colors &amp; quick paint</strong><p id="color_hint" class="small text-secondary mb-0">Pick a color, then click or drag across cells. Right-click a cell for quick colors.</p></div>
@@ -158,6 +172,16 @@
             </div>
         </div>
     </div>
+    <section id="color_legend" class="color-legend mb-3" aria-labelledby="color_legend_title" hidden>
+        <h2 id="color_legend_title" class="fs-6 mb-1">Color usage &amp; meanings</h2>
+        <p class="small text-secondary mb-2">Colors appear here when applied. Describe what each color means; previous colors stay in this record.</p>
+        <div class="color-legend-scroll">
+            <table class="table table-sm align-middle mb-0" aria-label="Color usage and meanings">
+                <thead><tr><th scope="col">Color</th><th scope="col">Meaning / purpose</th></tr></thead>
+                <tbody id="color_legend_rows"></tbody>
+            </table>
+        </div>
+    </section>
     <div class="d-flex align-items-center justify-content-end gap-2 mb-2 flex-wrap">
         <small class="text-muted me-auto">Drag column edges to resize · Right-click cells to color</small>
         <button type="button" id="btn_reset_columns" class="btn btn-outline-secondary btn-sm">Reset column widths</button>
@@ -189,24 +213,10 @@
         </tbody>
     </table>
     </div>
-    <div id="bottom_nav" aria-label="Design actions">
-        <div class="design-toolbar">
-            <div class="design-actions">
-                <button type="button" class="btn btn-primary action-button" id="copy_url">
-                    <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>
-                    <span>Copy Shareable URL</span>
-                </button>
-            </div>
+    <div id="bottom_nav" aria-label="Project updates">
+        <div class="d-flex justify-content-end">
             <div id="whats_new">
-                <a title="Released 2025-05-19" class="link-success" href="https://github.com/ckabalan/visualsubnetcalc/releases" target="_blank" rel="noopener noreferrer" aria-label="What's New">v1.4.0 (What's New?)</a>
-            </div>
-        </div>
-        <p id="share_status" class="small mb-0" role="status" aria-live="polite"></p>
-        <div id="share_fallback" class="share-fallback" hidden>
-            <label for="share_url" class="form-label">Shareable URL — select and copy this link</label>
-            <div class="d-flex gap-2">
-                <input id="share_url" type="text" class="form-control" readonly spellcheck="false">
-                <button id="select_share_url" type="button" class="btn btn-outline-primary">Select link</button>
+                <a class="link-success" href="https://github.com/kashing-cks/visualsubnetcalc/commits/main/" target="_blank" rel="noopener noreferrer" aria-label="What's New">What's New?</a>
             </div>
         </div>
     </div>
@@ -325,7 +335,7 @@
                         <li><span style="font-weight:bold">Embrace community contributions.</span> Consider and respond to all feedback and pull requests in the context of these tenets.</li>
                     </ul>
                     <h4 class="mt-4">Credits</h4>
-                    Developed by <a href="https://www.caesarkabalan.com/" target="_blank" rel="noopener noreferrer">Caesar Kabalan</a> with help from <a href="https://github.com/ckabalan/visualsubnetcalc/graphs/contributors" target="_blank" rel="noopener noreferrer">GitHub Contributors</a>!<br/>
+                    Maintained by <a href="https://github.com/kashing-cks/visualsubnetcalc" target="_blank" rel="noopener noreferrer">kashing-cks</a>. Originally developed by <a href="https://www.caesarkabalan.com/" target="_blank" rel="noopener noreferrer">Caesar Kabalan</a>.<br/>
                     <br/>
                     Special thanks to <a href="https://www.davidc.net/" target="_blank" rel="noopener noreferrer">davidc</a> for the <a href="https://www.davidc.net/sites/default/subnets/subnets.html" target="_blank" rel="noopener noreferrer">original tool</a> this website is inspired by.<br/>
                     <br/>
@@ -333,7 +343,7 @@
                     <br/>
                     All contributions, even suggestions or bug reports, are welcome at:<br/>
                     <ul>
-                        <li>GitHub: <a href="https://github.com/ckabalan/visualsubnetcalc" target="_blank" rel="noopener noreferrer">https://github.com/ckabalan/visualsubnetcalc</a></li>
+                        <li>GitHub: <a href="https://github.com/kashing-cks/visualsubnetcalc" target="_blank" rel="noopener noreferrer">https://github.com/kashing-cks/visualsubnetcalc</a></li>
                         <li>LinkedIn: <a href="https://www.linkedin.com/in/caesarkabalan/" target="_blank" rel="noopener noreferrer">Caesar Kabalan</a></li>
                     </ul>
                 </div>

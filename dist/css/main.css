@@ -151,6 +151,14 @@
 }
 .quick-swatches { display: grid; grid-template-columns: repeat(8, 1fr); gap: 0.4rem; margin-block: 0.75rem; }
 .quick-swatches button { height: 1.65rem; border: 1px solid #64748b; border-radius: 0.3rem; }
+.color-legend { padding: 1rem; border: 1px solid #dce3ec; border-radius: 0.75rem; background: #f8fafc; }
+.color-legend-scroll { max-height: 18rem; overflow: auto; }
+.color-legend table { table-layout: fixed; width: 100%; }
+.color-legend th:first-child { width: 9rem; }
+.color-legend td { overflow-wrap: anywhere; }
+.color-legend thead { position: sticky; top: 0; background: #f8fafc; z-index: 1; }
+.legend-swatch { display: inline-block; width: 1.4rem; height: 1.4rem; margin-right: 0.5rem; border: 1px solid #64748b; border-radius: 0.25rem; vertical-align: middle; }
+.color-legend textarea { width: 100%; min-width: 0; resize: vertical; }
 #calc .quick-color-target { outline: 2px solid #175985; outline-offset: -2px; }
 #calc.color-mode td { cursor: crosshair; }
 body.painting-cells { user-select: none; }

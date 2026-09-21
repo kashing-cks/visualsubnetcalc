@@ -29,7 +29,7 @@ widths for readability and horizontal scrolling for large hierarchies.
 
 ## Sharing a Design
 
-Use **Copy Shareable URL** in the action bar below the table. The link retains the
+Use **Copy Shareable URL** in the action bar above the table. The link retains the
 site's deployment path, including GitHub Pages project directories. Success is
 shown only after copying completes; if clipboard access is unavailable, a selectable
 link appears for manual copying with Ctrl+C / ⌘C.
@@ -73,14 +73,27 @@ button to finish. The action bar and palette wrap to fit smaller screens.
   appear in Excel. Children inherit cell colours on Split; Join restores the parent's
   cell colours. A cell override takes priority over row and default block colours.
 
+## Color usage & meanings
+
+Applying a row/cell color or committing a Split/Join color automatically adds it to
+the **Color usage & meanings** table above the subnet table, beneath the color controls. Each color appears once;
+enter its meaning (for example Production, DMZ or Reserved) directly beside the swatch.
+Selecting a brush without painting does not add a record. Previous colors and their
+descriptions remain after repainting or undoing, so the table doubles as a color history.
+Importing a design replaces the history with that design's legend; older designs
+automatically collect their existing custom colors. Default untouched block colors
+are not added. JSON and shareable links preserve the legend; Excel includes
+color swatches and meanings below the subnet table in the same **Subnets** sheet
+whenever there are recorded colors.
+
 ## Export to Excel
 
 Choose **Export to Excel** beside the Tools menu to download the current design (for example
-`10.0.0.0_16.xlsx`). The workbook contains two sheets:
+`10.0.0.0_16.xlsx`). The workbook contains these sheets:
 
 | Sheet | Contents |
 | ----- | -------- |
-| **Subnets** | Subnet address, address range, usable IPs for the active mode, host count, and the orange/blue hierarchy with its colours and merged cells. Each block contains its prefix and note, without Split/Join labels or a separate Note column. |
+| **Subnets** | Subnet address, address range, usable IPs for the active mode, host count, and the hierarchy with its colours and merged cells. Each block contains its prefix and note, without Split/Join labels or a separate Note column. Recorded color swatches and meanings appear below the subnet table in the same sheet. |
 | **Hierarchy Notes** | Every subnet with its level, parent subnet and note — convenient for filtering and reading. |
 
 ## Operating Modes

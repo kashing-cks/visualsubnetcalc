@@ -7,12 +7,64 @@ let tableColumns = []
 let tableWidthReference = 0
 const defaultBlockColors = { split: '#f27f64', join: '#6fb0d6' }
 let blockColors = { ...defaultBlockColors }
+let colorLegend = new Map()
 const colorUndo = []
 let paintStroke = null
 let quickColorCell = null
 const infoCellKeys = ['row_address', 'row_range', 'row_usable', 'row_hosts']
 
 function validColor(value) { return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value) }
+
+function recordColor(color) {
+    if (!validColor(color)) return
+    const key = color.toLowerCase()
+    if (colorLegend.has(key)) return
+    colorLegend.set(key, '')
+    // The legend sits above the table: defer new rows until a paint stroke ends
+    // so revealing it cannot move cells away from the pointer mid-drag.
+    if (!paintStroke) appendColorLegendRow(key, '')
+}
+
+function appendColorLegendRow(color, meaning) {
+    const row = document.createElement('tr')
+    row.dataset.color = color
+    const swatchCell = document.createElement('td')
+    const swatch = document.createElement('span')
+    swatch.className = 'legend-swatch'
+    swatch.style.backgroundColor = color
+    swatch.setAttribute('aria-hidden', 'true')
+    const code = document.createElement('code')
+    code.textContent = color.toUpperCase()
+    swatchCell.append(swatch, code)
+    const meaningCell = document.createElement('td')
+    const editor = document.createElement('textarea')
+    editor.className = 'form-control form-control-sm'
+    editor.rows = 1
+    editor.placeholder = 'e.g. Production, DMZ, Reserved'
+    editor.setAttribute('aria-label', 'Meaning for ' + color.toUpperCase())
+    editor.value = meaning
+    editor.addEventListener('input', () => colorLegend.set(color, editor.value))
+    meaningCell.appendChild(editor)
+    row.append(swatchCell, meaningCell)
+    document.getElementById('color_legend_rows').appendChild(row)
+    document.getElementById('color_legend').hidden = false
+}
+
+function collectDesignColors() {
+    // Include colors from older saved designs that have no legend yet.
+    function visit(tree) {
+        for (const [cidr, node] of Object.entries(tree)) {
+            if (cidr.startsWith('_')) continue
+            recordColor(node._color)
+            for (const key of [...infoCellKeys, 'block']) recordColor(node._cellColors?.[key])
+            visit(node)
+        }
+    }
+    visit(subnetMap)
+    for (const kind of ['split', 'join']) {
+        if (blockColors[kind].toLowerCase() !== defaultBlockColors[kind]) recordColor(blockColors[kind])
+    }
+}
 
 function textColor(background) {
     const rgb = background.slice(1).match(/../g).map(value => {
@@ -50,6 +102,7 @@ function rememberColorChange(changes) {
 }
 
 function applyPaint(cell, color, scope, changes) {
+    recordColor(color)
     const key = infoCellKeys.find(key => cell.classList.contains(key))
     const cidr = cell.dataset.subnet
     const node = getSubnetNode(cidr)
@@ -205,6 +258,10 @@ function finishPaintStroke() {
     if (paintStroke) rememberColorChange(paintStroke.changes)
     paintStroke = null
     document.body.classList.remove('painting-cells')
+    const visibleColors = new Set(Array.from(document.querySelectorAll('#color_legend_rows tr'), row => row.dataset.color))
+    colorLegend.forEach((meaning, color) => {
+        if (!visibleColors.has(color)) appendColorLegendRow(color, meaning)
+    })
 }
 document.addEventListener('pointerup', finishPaintStroke)
 document.addEventListener('pointercancel', finishPaintStroke)
@@ -227,6 +284,8 @@ $('#split_color, #join_color').on('input', function() {
     refreshColors()
 })
 $('#split_color, #join_color').on('change', function() {
+    // Record the committed choice, not every intermediate native-picker shade.
+    recordColor(this.value)
     const previous = previousBlockColor
     if (previous && JSON.stringify(previous) !== JSON.stringify(blockColors)) rememberColorChange([() => { blockColors = previous }])
     previousBlockColor = null
@@ -458,7 +517,27 @@ function buildExcelSubnetSheet() {
     sheet['!cols'] = [{ wch: 20 }, { wch: 38 }, { wch: 38 }, { wch: 12 }]
         .concat(Array.from({ length: lastColumn - treeStartColumn + 1 }, () => ({ wch: 12 })))
     sheet['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: document.querySelectorAll('#calcbody tr').length, c: lastColumn } })
+    appendExcelColorLegend(sheet, lastColumn)
     return sheet
+}
+
+function appendExcelColorLegend(sheet, lastColumn) {
+    if (!colorLegend.size) return
+    const startRow = XLSX.utils.decode_range(sheet['!ref']).e.r + 2
+    const rows = [['Color', 'Meaning / purpose'], ...Array.from(colorLegend, ([color, meaning]) => [color.toUpperCase(), meaning])]
+    rows.forEach((row, index) => {
+        const r = startRow + index
+        for (let c = 0; c <= lastColumn; c++) {
+            const fill = index === 0 ? 'E9ECEF' : c === 0 ? row[0].slice(1) : 'FFFFFF'
+            const cell = excelCell(c < 2 ? row[c] : '', fill, index === 0)
+            cell.s.font.color = { rgb: textColor('#' + fill).slice(1) }
+            sheet[XLSX.utils.encode_cell({ r, c })] = cell
+        }
+        sheet['!merges'].push({ s: { r, c: 1 }, e: { r, c: lastColumn } })
+        const lines = row[1].split('\n').reduce((count, line) => count + Math.max(1, Math.ceil(line.length / 80)), 0)
+        sheet['!rows'][r] = { hpt: Math.max(30, lines * 16 + 10) }
+    })
+    sheet['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: startRow + rows.length - 1, c: lastColumn } })
 }
 
 function buildExcelNotesSheet() {
@@ -501,7 +580,7 @@ function setColorPanel(open) {
 }
 
 let copyStatusTimer
-$('#bottom_nav #copy_url').on('click', async function() {
+$('#copy_url').on('click', async function() {
     clearTimeout(copyStatusTimer)
     const button = this
     const url = new URL(getConfigUrl(), window.location.href).href
@@ -716,6 +795,7 @@ function renderTable(operatingMode) {
     addRowTree(subnetMap, 0, maxDepth, operatingMode)
     renderTableColumns(maxDepth)
     refreshColors()
+    collectDesignColors()
 }
 
 function renderTableColumns(maxDepth) {
@@ -1427,6 +1507,7 @@ function exportConfig(isMinified = true) {
             'base_network': baseNetwork,
             'subnets': isMinified ? miniSubnetMap : subnetMap,
             ...(Object.keys(defaultBlockColors).some(key => blockColors[key] !== defaultBlockColors[key]) ? { block_colors: { ...blockColors } } : {}),
+            ...(colorLegend.size ? { color_legend: Object.fromEntries(colorLegend) } : {}),
         }
     } else {
         return {
@@ -1434,6 +1515,7 @@ function exportConfig(isMinified = true) {
             'base_network': baseNetwork,
             'subnets': isMinified ? miniSubnetMap : subnetMap,
             ...(Object.keys(defaultBlockColors).some(key => blockColors[key] !== defaultBlockColors[key]) ? { block_colors: { ...blockColors } } : {}),
+            ...(colorLegend.size ? { color_legend: Object.fromEntries(colorLegend) } : {}),
         }
     }
 }
@@ -1552,6 +1634,16 @@ function renameKey(obj, oldKey, newKey) {
 }
 
 function importConfig(text) {
+    colorLegend = new Map()
+    document.getElementById('color_legend_rows').replaceChildren()
+    document.getElementById('color_legend').hidden = true
+    if (text.color_legend && typeof text.color_legend === 'object' && !Array.isArray(text.color_legend)) {
+        for (const [color, meaning] of Object.entries(text.color_legend)) {
+            if (!validColor(color) || typeof meaning !== 'string') continue
+            colorLegend.set(color.toLowerCase(), meaning)
+        }
+        colorLegend.forEach((meaning, color) => appendColorLegendRow(color, meaning))
+    }
     blockColors = { ...defaultBlockColors }
     for (const kind of ['split', 'join']) {
         if (validColor(text.block_colors?.[kind])) blockColors[kind] = text.block_colors[kind]

@@ -169,7 +169,10 @@ test('Excel preserves hierarchy fills, spans and notes without action labels or 
   expect(result.sheet.E2.v).toBe('/18\n子層');
   expect(result.sheet.F2.v).toBe('/17\n子層');
   expect(result.sheet.G2.v).toBe('/16\n父層 "&<>"');
-  expect(result.sheet['!ref']).toBe('A1:G4');
+  expect(result.sheet['!ref']).toBe('A1:G7');
+  expect(result.sheet.A6.v).toBe('Color');
+  expect(result.sheet.A7.v).toBe('#FFADAD');
+  expect(result.sheet.A7.s.fgColor.rgb).toBe('FFADAD');
   expect(result.sheet['!merges']).toContainEqual({ s: { r: 1, c: 6 }, e: { r: 3, c: 6 } });
   expect(result.sheet['!merges']).toContainEqual({ s: { r: 3, c: 4 }, e: { r: 3, c: 5 } });
   expect(result.hierarchy).toContainEqual([0, '10.0.0.0/16', '', '父層 "&<>"']);
