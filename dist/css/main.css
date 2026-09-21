@@ -333,6 +333,15 @@ body.resizing-columns, body.resizing-columns * {
     background: #ffffff40;
 }
 
+#calc .block-note-field {
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex: 1;
+    min-width: 0;
+    cursor: text;
+}
+
 #calc .block-note {
     width: 6rem;
     flex: 1;
@@ -341,7 +350,7 @@ body.resizing-columns, body.resizing-columns * {
     border-radius: 0.2rem;
     background: transparent;
     color: inherit;
-    padding: 0.3rem;
+    padding: 0.3rem 0.3rem 0.3rem 1.4rem;
     font: inherit;
     cursor: text;
 }
@@ -349,6 +358,21 @@ body.resizing-columns, body.resizing-columns * {
 #calc .block-note::placeholder {
     color: inherit;
     opacity: 0.6;
+}
+
+#calc .edit-hint {
+    position: absolute;
+    left: 0.4rem;
+    width: 0.85rem;
+    height: 0.85rem;
+    fill: currentColor;
+    opacity: 0.55;
+    pointer-events: none;
+}
+
+#calc .block-note:not(:placeholder-shown) + .edit-hint,
+#calc .block-note:focus + .edit-hint {
+    opacity: 0;
 }
 
 #calc .block-note:focus {

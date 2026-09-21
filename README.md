@@ -40,7 +40,9 @@ The table has no separate Note column; notes are edited where they belong:
 
 - **Inline in the Split / Join blocks.** The orange Split block edits the current subnet's note and
   the blue Join block edits the parent's note. The `/16`, `/17`, … prefix is a button — clicking it
-  performs the split or join, while typing in the note field never changes the structure.
+  performs the split or join, while typing in the note field never changes the structure. Empty
+  blocks show a pencil icon instead of placeholder wording; it disappears as soon as the block has
+  text or receives focus, and hovering a block shows its full note.
 - **Hierarchy Notes panel.** Click **Hierarchy Notes** above the table for a scrollable list of every
   subnet, its level and its parent. Each subnet appears exactly once and branches can be collapsed,
   so deep hierarchies stay readable.

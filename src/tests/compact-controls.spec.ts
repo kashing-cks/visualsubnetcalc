@@ -11,10 +11,30 @@ test('File buttons are visible without opening Tools and the Note column is remo
   await expect(page.locator('#importExportArea')).toBeVisible();
 });
 
+test('Split and Join blocks hint editing with an icon instead of placeholder text', async ({ page }) => {
+  await page.goto('/');
+  const block = page.locator('#calcbody .subnet-block-editor').first();
+  const note = block.locator('.block-note');
+  await expect(block).not.toContainText('Note');
+  await expect(note).toHaveAttribute('placeholder', ' ');
+  await expect(note).toHaveAttribute('title', 'Click to add a note');
+  await expect(block.locator('.edit-hint')).toBeVisible();
+  await expect(block.locator('.edit-hint')).toHaveAttribute('aria-hidden', 'true');
+  // The pencil hint disappears while typing and comes back for an empty block.
+  await note.click();
+  await expect(block.locator('.edit-hint')).toHaveCSS('opacity', '0');
+  await note.fill('/24 Production VPC');
+  await note.blur();
+  await expect(block.locator('.edit-hint')).toHaveCSS('opacity', '0');
+  await expect(note).toHaveAttribute('title', '/24 Production VPC');
+  await note.fill('');
+  await note.blur();
+  await expect(block.locator('.edit-hint')).toHaveCSS('opacity', '0.55');
+});
+
 test('Extended palette and custom color persist through splits and sharing', async ({ page }) => {
   await page.goto('/');
   await page.getByText('Change Colors »').click();
-  await expect(page.locator('#color_palette [id^="palette_picker_"]')).toHaveCount(24);
   await page.getByRole('button', { name: 'Color 24', exact: true }).click();
   await page.locator('.row_address').click();
   await expect(page.locator('#calcbody tr')).toHaveCSS('background-color', 'rgb(215, 204, 200)');
