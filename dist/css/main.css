@@ -265,6 +265,8 @@ body.painting-cells { user-select: none; }
 }
 
 #calc {
+    --bs-table-border-color: #000;
+    border-color: #000;
     vertical-align: middle;
     table-layout: fixed;
 }
@@ -286,7 +288,7 @@ body.painting-cells { user-select: none; }
     cursor: col-resize;
     touch-action: none;
     z-index: 1;
-    border-right: 2px solid #17598555;
+    border-right: 2px solid #000;
 }
 
 #calc .column-resizer:hover, #calc .column-resizer:focus-visible {
