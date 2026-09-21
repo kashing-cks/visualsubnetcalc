@@ -5,6 +5,86 @@ let infoColumnCount = 4
 const tableColumnWidths = new Map()
 let tableColumns = []
 let tableWidthReference = 0
+const defaultBlockColors = { split: '#f27f64', join: '#6fb0d6' }
+let blockColors = { ...defaultBlockColors }
+const colorUndo = []
+let paintStroke = null
+let quickColorCell = null
+const infoCellKeys = ['row_address', 'row_range', 'row_usable', 'row_hosts']
+
+function validColor(value) { return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value) }
+
+function textColor(background) {
+    const rgb = background.slice(1).match(/../g).map(value => {
+        const channel = parseInt(value, 16) / 255
+        return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+    })
+    return rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722 > 0.179 ? '#000000' : '#ffffff'
+}
+
+function refreshColors() {
+    for (const kind of ['split', 'join']) {
+        document.documentElement.style.setProperty('--' + kind + '-background', blockColors[kind])
+        document.documentElement.style.setProperty('--' + kind + '-foreground', textColor(blockColors[kind]))
+        document.getElementById(kind + '_color').value = blockColors[kind]
+    }
+    document.querySelectorAll('#calcbody tr').forEach(row => {
+        const node = getSubnetNode(row.querySelector('.row_address').dataset.subnet)
+        row.style.backgroundColor = validColor(node._color) ? node._color : ''
+        for (const cell of row.cells) {
+            const key = infoCellKeys.find(key => cell.classList.contains(key))
+            const cellNode = key ? node : getSubnetNode(cell.dataset.subnet)
+            const override = cellNode?._cellColors?.[key || 'block']
+            cell.style.backgroundColor = validColor(override) ? override : ''
+            const background = validColor(override) ? override : key ? (validColor(node._color) ? node._color : '#ffffff') : blockColors[cell.classList.contains('split') ? 'split' : 'join']
+            cell.style.color = textColor(background)
+        }
+    })
+}
+
+function rememberColorChange(changes) {
+    if (!changes.length) return
+    colorUndo.push(changes)
+    if (colorUndo.length > 50) colorUndo.shift()
+    $('#undo_color').prop('disabled', false)
+}
+
+function applyPaint(cell, color, scope, changes) {
+    const key = infoCellKeys.find(key => cell.classList.contains(key))
+    const cidr = cell.dataset.subnet
+    const node = getSubnetNode(cidr)
+    const property = key && scope === 'row' ? '_color' : '_cellColors'
+    const before = JSON.stringify(node[property])
+    if (property === '_color') {
+        if (color) node._color = color
+        else delete node._color
+    } else {
+        const colors = { ...node._cellColors }
+        if (color) colors[key || 'block'] = color
+        else delete colors[key || 'block']
+        if (Object.keys(colors).length) node._cellColors = colors
+        else delete node._cellColors
+    }
+    if (JSON.stringify(node[property]) !== before) changes.push(() => {
+        const target = getSubnetNode(cidr)
+        if (!target) return
+        if (before === undefined) delete target[property]
+        else target[property] = JSON.parse(before)
+    })
+    refreshColors()
+}
+
+function selectPaintColor(color) {
+    inflightColor = color
+    $('#color_hint').text('Selected ' + (color ? color.toUpperCase() : 'reset') + ' — click or drag across cells. Esc stops painting.')
+    $('#calc').addClass('color-mode')
+}
+
+function closeQuickColors() {
+    $('#calc .quick-color-target').removeClass('quick-color-target')
+    document.getElementById('quick_colors').hidden = true
+    quickColorCell = null
+}
 // NORMAL mode:
 //   - Smallest subnet: /32
 //   - Two reserved addresses per subnet of size <= 30:
@@ -93,27 +173,116 @@ $('#color_palette').on('keydown', 'div[role="button"]', function(event) {
 $('#color_palette').on('click', '[id^="palette_picker_"]', function() {
     // We don't really NEED to convert this to hex, but it's really low overhead to do the
     // conversion here and saves us space in the export/save
-    inflightColor = rgba2hex($(this).css('background-color'))
+    selectPaintColor(rgba2hex($(this).css('background-color')))
     $('#color_palette [id^="palette_picker_"]').attr('aria-pressed', 'false')
     $(this).attr('aria-pressed', 'true')
-    $('#color_hint').text('Selected ' + inflightColor.toUpperCase() + ' — click a subnet row to apply it.')
-    $('#calc').addClass('color-mode')
 })
 $('#custom_color').on('input change', function() {
-    inflightColor = this.value
+    selectPaintColor(this.value)
     $('#color_palette [id^="palette_picker_"]').attr('aria-pressed', 'false')
-    $('#color_hint').text('Selected ' + inflightColor.toUpperCase() + ' — click a subnet row to apply it.')
-    $('#calc').addClass('color-mode')
 })
 
-$('#calcbody').on('click', '.row_address, .row_range, .row_usable, .row_hosts, .note, input', function(event) {
-    if ($(event.target).closest('.split, .join').length) return
-    if (inflightColor !== 'NONE') {
-        const cidr = $(this).closest('tr').find('.row_address')[0].dataset.subnet
-        mutate_subnet_map('color', cidr, '', inflightColor)
-        // We could re-render here, but there is really no point, keep performant and just change the background color now
-        //renderTable();
-        $(this).closest('tr').css('background-color', inflightColor)
+$('#calcbody').on('pointerdown', 'td', function(event) {
+    if (event.button !== 0 || inflightColor === 'NONE' || $(event.target).closest('button, input, label, .column-resizer').length) return
+    event.preventDefault()
+    paintStroke = { changes: [], visited: new Set(), color: inflightColor, scope: $('#paint_scope').val() }
+    document.body.classList.add('painting-cells')
+    paintCellInStroke(this)
+})
+
+function paintCellInStroke(cell) {
+    if (!paintStroke || paintStroke.visited.has(cell)) return
+    paintStroke.visited.add(cell)
+    applyPaint(cell, paintStroke.color, paintStroke.scope, paintStroke.changes)
+}
+
+document.addEventListener('pointermove', event => {
+    if (!paintStroke) return
+    const cell = document.elementFromPoint(event.clientX, event.clientY)?.closest('#calcbody td')
+    if (cell) paintCellInStroke(cell)
+})
+function finishPaintStroke() {
+    if (paintStroke) rememberColorChange(paintStroke.changes)
+    paintStroke = null
+    document.body.classList.remove('painting-cells')
+}
+document.addEventListener('pointerup', finishPaintStroke)
+document.addEventListener('pointercancel', finishPaintStroke)
+window.addEventListener('blur', finishPaintStroke)
+$('#undo_color').on('click', function() {
+    const changes = colorUndo.pop()
+    if (changes) [...changes].reverse().forEach(undo => undo())
+    refreshColors()
+    $(this).prop('disabled', !colorUndo.length)
+})
+$('#clear_color').on('click', function() {
+    $('#color_palette [id^="palette_picker_"]').attr('aria-pressed', 'false')
+    selectPaintColor('')
+})
+let previousBlockColor
+$('#split_color, #join_color').on('input', function() {
+    if (!previousBlockColor) previousBlockColor = { ...blockColors }
+    const kind = this.id === 'split_color' ? 'split' : 'join'
+    blockColors[kind] = this.value
+    refreshColors()
+})
+$('#split_color, #join_color').on('change', function() {
+    const previous = previousBlockColor
+    if (previous && JSON.stringify(previous) !== JSON.stringify(blockColors)) rememberColorChange([() => { blockColors = previous }])
+    previousBlockColor = null
+})
+$('#reset_tree_colors').on('click', function() {
+    const previous = { ...blockColors }
+    rememberColorChange([() => { blockColors = previous }])
+    blockColors = { ...defaultBlockColors }
+    refreshColors()
+})
+
+$('#color_palette [id^="palette_picker_"]').each(function(index) {
+    const color = rgba2hex(getComputedStyle(this).backgroundColor)
+    $('<button>', { type: 'button', 'aria-label': 'Quick color ' + (index + 1), title: color })
+        .css('background-color', color).on('click', () => {
+            const changes = []
+            applyPaint(quickColorCell, color, 'cell', changes)
+            rememberColorChange(changes)
+            closeQuickColors()
+        }).appendTo('#quick_swatches')
+})
+$('#calcbody').on('contextmenu', 'td', function(event) {
+    event.preventDefault()
+    closeQuickColors()
+    quickColorCell = this
+    this.classList.add('quick-color-target')
+    const panel = document.getElementById('quick_colors')
+    panel.hidden = false
+    panel.style.left = Math.max(8, Math.min(event.clientX, innerWidth - panel.offsetWidth - 8)) + 'px'
+    panel.style.top = Math.max(8, Math.min(event.clientY, innerHeight - panel.offsetHeight - 8)) + 'px'
+    const background = this.style.backgroundColor || (this.matches('.split, .join') ? getComputedStyle(this).backgroundColor : getComputedStyle(this.parentElement).backgroundColor)
+    $('#quick_custom_color').val(rgba2hex(background).slice(0, 7))
+    panel.querySelector('button').focus({ preventScroll: true })
+})
+$('#quick_custom_color').on('change', function() {
+    if (!quickColorCell) return
+    const changes = []
+    applyPaint(quickColorCell, this.value, 'cell', changes)
+    rememberColorChange(changes)
+    closeQuickColors()
+})
+$('#clear_cell_color').on('click', function() {
+    const changes = []
+    applyPaint(quickColorCell, '', 'cell', changes)
+    rememberColorChange(changes)
+    closeQuickColors()
+})
+$('#close_quick_colors').on('click', closeQuickColors)
+document.addEventListener('pointerdown', event => {
+    if (!event.target.closest('#quick_colors')) closeQuickColors()
+})
+document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') {
+        finishPaintStroke()
+        closeQuickColors()
+        setColorPanel(false)
     }
 })
 
@@ -267,10 +436,12 @@ function buildExcelSubnetSheet() {
                 value = '/' + cell.dataset.subnet.split('/')[1]
                 if (node && node._note) value += '\n' + node._note
             }
-            const background = excelBackground(treeCell ? cell : row)
+            const background = excelBackground(treeCell || cell.style.backgroundColor ? cell : row)
             for (let dr = 0; dr < cell.rowSpan; dr++) {
                 for (let dc = 0; dc < columnSpan; dc++) {
-                    sheet[XLSX.utils.encode_cell({ r: r + dr, c: c + dc })] = excelCell(dr || dc ? '' : value, background)
+                    const exported = excelCell(dr || dc ? '' : value, background)
+                    exported.s.font.color = { rgb: textColor('#' + background).slice(1) }
+                    sheet[XLSX.utils.encode_cell({ r: r + dr, c: c + dc })] = exported
                 }
             }
             if (cell.rowSpan > 1 || columnSpan > 1) {
@@ -308,11 +479,11 @@ function buildExcelNotesSheet() {
     return sheet
 }
 
-$('#bottom_nav #colors_word_open').on('click', function() {
+$('#colors_word_open').on('click', function() {
     setColorPanel(document.getElementById('color_panel').hidden)
 })
 
-$('#bottom_nav #colors_word_close').on('click', function() {
+$('#colors_word_close').on('click', function() {
     setColorPanel(false)
     document.getElementById('colors_word_open').focus()
 })
@@ -321,10 +492,11 @@ function setColorPanel(open) {
     document.getElementById('color_panel').hidden = !open
     $('#colors_word_open').attr('aria-expanded', String(open))
     if (!open) {
+        finishPaintStroke()
         inflightColor = 'NONE'
         $('#calc').removeClass('color-mode')
         $('#color_palette [id^="palette_picker_"]').attr('aria-pressed', 'false')
-        $('#color_hint').text('Pick a color, then click a subnet row to apply it.')
+        $('#color_hint').text('Pick a color, then click or drag across cells. Right-click a cell for quick colors.')
     }
 }
 
@@ -386,6 +558,8 @@ $('#btn_import_export').on('click', function() {
 })
 
 function reset() {
+    colorUndo.length = 0
+    $('#undo_color').prop('disabled', true)
 
     set_usable_ips_title(operatingMode);
 
@@ -436,6 +610,8 @@ function isMatchingSize(subnet1, subnet2) {
 }
 
 $('#calcbody').on('click', '.subnet-action', function(event) {
+    colorUndo.length = 0
+    $('#undo_color').prop('disabled', true)
     const cell = this.closest('td')
     // HTML DOM Data elements! Yay! See the `data-*` attributes of the HTML tags
     mutate_subnet_map(cell.dataset.mutateVerb, cell.dataset.subnet, '')
@@ -533,11 +709,13 @@ function renderHierarchyNotes() {
 }
 
 function renderTable(operatingMode) {
+    closeQuickColors()
     // TODO: Validation Code
     $('#calcbody').empty();
     let maxDepth = get_dict_max_depth(subnetMap, 0)
     addRowTree(subnetMap, 0, maxDepth, operatingMode)
     renderTableColumns(maxDepth)
+    refreshColors()
 }
 
 function renderTableColumns(maxDepth) {
@@ -885,7 +1063,7 @@ function has_network_sub_keys(dict) {
     let allKeys = Object.keys(dict)
     // Maybe an efficient way to do this with a Lambda?
     for (let i in allKeys) {
-        if (!allKeys[i].startsWith('_') && allKeys[i] !== 'n' && allKeys[i] !== 'c') {
+        if (!allKeys[i].startsWith('_') && !['n', 'c', 'p'].includes(allKeys[i])) {
             return true
         }
     }
@@ -1005,6 +1183,9 @@ function mutate_subnet_map(verb, network, subnetTree, propValue = '') {
                         subnetTree[mapKey][new_networks[0]]['_color'] = subnetTree[mapKey]['_color']
                         subnetTree[mapKey][new_networks[1]]['_color'] = subnetTree[mapKey]['_color']
                     }
+                    if (subnetTree[mapKey]._cellColors) {
+                        for (const child of new_networks) subnetTree[mapKey][child]._cellColors = { ...subnetTree[mapKey]._cellColors }
+                    }
                     delete subnetTree[mapKey]['_color']
                 } else {
                     switch (operatingMode) {
@@ -1029,6 +1210,7 @@ function mutate_subnet_map(verb, network, subnetTree, propValue = '') {
             } else if (verb === 'join') {
                 // Restore this level's note; legacy trees without one consolidate leaf notes.
                 subnetTree[mapKey] = {
+                    ...(subnetTree[mapKey]._cellColors ? { _cellColors: { ...subnetTree[mapKey]._cellColors } } : {}),
                     '_note': subnetTree[mapKey]['_note'] ?? get_consolidated_property(subnetTree[mapKey], '_note'),
                     '_color': get_consolidated_property(subnetTree[mapKey], '_color')
                 }
@@ -1244,12 +1426,14 @@ function exportConfig(isMinified = true) {
             'operating_mode': operatingMode,
             'base_network': baseNetwork,
             'subnets': isMinified ? miniSubnetMap : subnetMap,
+            ...(Object.keys(defaultBlockColors).some(key => blockColors[key] !== defaultBlockColors[key]) ? { block_colors: { ...blockColors } } : {}),
         }
     } else {
         return {
             'config_version': configVersion,
             'base_network': baseNetwork,
             'subnets': isMinified ? miniSubnetMap : subnetMap,
+            ...(Object.keys(defaultBlockColors).some(key => blockColors[key] !== defaultBlockColors[key]) ? { block_colors: { ...blockColors } } : {}),
         }
     }
 }
@@ -1312,6 +1496,7 @@ function minifySubnetMap(minifiedMap, referenceMap, baseNetwork) {
         if (referenceMap[subnet].hasOwnProperty('_color')) {
             minifiedMap[nthRepresentation]['c'] = referenceMap[subnet]['_color']
         }
+        if (referenceMap[subnet]._cellColors) minifiedMap[nthRepresentation]['p'] = referenceMap[subnet]._cellColors
         if (Object.keys(referenceMap[subnet]).some(key => !key.startsWith('_'))) {
             minifySubnetMap(minifiedMap[nthRepresentation], referenceMap[subnet], baseNetwork);
         }
@@ -1320,7 +1505,7 @@ function minifySubnetMap(minifiedMap, referenceMap, baseNetwork) {
 
 function expandSubnetMap(expandedMap, miniMap, baseNetwork) {
     for (let mapKey in miniMap) {
-        if (mapKey === 'n' || mapKey === 'c') {
+        if (mapKey === 'n' || mapKey === 'c' || mapKey === 'p') {
             continue;
         }
         let subnetKey = getSubnetFromNth(baseNetwork, mapKey)
@@ -1334,6 +1519,7 @@ function expandSubnetMap(expandedMap, miniMap, baseNetwork) {
         if (miniMap[mapKey].hasOwnProperty('c')) {
             expandedMap[subnetKey]['_color'] = miniMap[mapKey]['c']
         }
+        if (miniMap[mapKey].p) expandedMap[subnetKey]._cellColors = miniMap[mapKey].p
     }
 }
 
@@ -1366,6 +1552,12 @@ function renameKey(obj, oldKey, newKey) {
 }
 
 function importConfig(text) {
+    blockColors = { ...defaultBlockColors }
+    for (const kind of ['split', 'join']) {
+        if (validColor(text.block_colors?.[kind])) blockColors[kind] = text.block_colors[kind]
+    }
+    colorUndo.length = 0
+    $('#undo_color').prop('disabled', true)
     if (text['config_version'] === '1') {
         var [subnetNet, subnetSize] = Object.keys(text['subnets'])[0].split('/')
     } else if (text['config_version'] === '2') {
@@ -1420,4 +1612,6 @@ function sortIPCIDRs(obj) {
   return sortedObj;
 }
 
-const rgba2hex = (rgba) => `#${rgba.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*(\d+\.{0,1}\d*))?\)$/).slice(1).map((n, i) => (i === 3 ? Math.round(parseFloat(n) * 255) : parseFloat(n)).toString(16).padStart(2, '0').replace('NaN', '')).join('')}`
+function rgba2hex(rgba) {
+    return `#${rgba.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*(\d+\.{0,1}\d*))?\)$/).slice(1).map((n, i) => (i === 3 ? Math.round(parseFloat(n) * 255) : parseFloat(n)).toString(16).padStart(2, '0').replace('NaN', '')).join('')}`
+}

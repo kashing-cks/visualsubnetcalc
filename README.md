@@ -53,11 +53,25 @@ shareable URLs retain every level.
 
 ## Colours
 
-Click **Change Colors »** below the table, pick one of the 24 presets or a custom colour, then click
+Click **Change Colors »** above the table, pick one of the 24 presets or a custom colour, then click
 a subnet's address, range, usable IPs or host count to apply it. Colours are inherited when a subnet
 is split and are preserved in JSON, shareable URLs and the Excel export.
 The expandable colour panel shows the selected colour and a **Stop Changing Colors**
 button to finish. The action bar and palette wrap to fit smaller screens.
+
+- **Default block colors:** customise Split and Join independently; dark backgrounds
+  automatically use light text. **Reset block colors** restores the original palette.
+- **Quick cell colors:** right-click any data cell or Split/Join block to open a nearby
+  palette and apply a preset or custom colour immediately. **Reset cell** removes its override.
+- **Paint brush:** choose **Whole row** or **Single cell**, pick a colour, then click or
+  drag across cells. Split/Join backgrounds always paint individually; note editors,
+  prefix buttons and resize handles retain their normal actions. Use the block's outer
+  background or its right-click palette to colour a block.
+- **Undo color** reverses the last colour operation (a drag counts as one); **Esc** stops
+  painting. Undo history resets on Split/Join, network changes or importing another design.
+- Per-cell colours and default block colours travel with JSON and shareable links and
+  appear in Excel. Children inherit cell colours on Split; Join restores the parent's
+  cell colours. A cell override takes priority over row and default block colours.
 
 ## Export to Excel
 

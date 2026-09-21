@@ -119,8 +119,47 @@
 
 
 
+    <div id="table_colors" class="mb-3">
+        <button type="button" class="btn btn-outline-secondary action-button" id="colors_word_open" aria-label="Change Colors" aria-expanded="false" aria-controls="color_panel">
+            <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1-4 2 2 0 0 1 1-4h3a3 3 0 0 0 3-3c0-4-4-7-9-7Z"/><circle cx="7" cy="10" r="1"/><circle cx="11" cy="7" r="1"/><circle cx="16" cy="8" r="1"/></svg>
+            <span>Change Colors &#187;</span>
+        </button>
+        <div id="color_panel" class="color-panel" hidden>
+            <div class="color-panel-heading">
+                <div><strong>Colors &amp; quick paint</strong><p id="color_hint" class="small text-secondary mb-0">Pick a color, then click or drag across cells. Right-click a cell for quick colors.</p></div>
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="colors_word_close" aria-label="Stop Changing Colors"><span>&#171; Stop Changing Colors</span></button>
+            </div>
+            <div class="paint-options">
+                <label for="paint_scope">Paint</label>
+                <select id="paint_scope" class="form-select form-select-sm"><option value="row">Whole row</option><option value="cell">Single cell</option></select>
+                <button type="button" id="undo_color" class="btn btn-outline-secondary btn-sm" disabled>Undo color</button>
+                <button type="button" id="clear_color" class="btn btn-outline-secondary btn-sm">Clear color brush</button>
+                <span class="small text-secondary">Esc stops painting · Split/Join blocks are colored individually</span>
+            </div>
+            <div id="color_palette" aria-label="Color Palette">
+                <div role="button" aria-label="Color 1" id="palette_picker_1"></div>
+                <div role="button" aria-label="Color 2" id="palette_picker_2"></div>
+                <div role="button" aria-label="Color 3" id="palette_picker_3"></div>
+                <div role="button" aria-label="Color 4" id="palette_picker_4"></div>
+                <div role="button" aria-label="Color 5" id="palette_picker_5"></div>
+                <div role="button" aria-label="Color 6" id="palette_picker_6"></div>
+                <div role="button" aria-label="Color 7" id="palette_picker_7"></div>
+                <div role="button" aria-label="Color 8" id="palette_picker_8"></div>
+                <div role="button" aria-label="Color 9" id="palette_picker_9"></div>
+                <div role="button" aria-label="Color 10" id="palette_picker_10"></div>
+                <label class="custom-color-label" for="custom_color">Custom color</label>
+                <input type="color" id="custom_color" value="#b3e5fc" aria-label="Custom color">
+            </div>
+            <div class="tree-color-options">
+                <strong>Default block colors</strong>
+                <label for="split_color">Split <input type="color" id="split_color" value="#f27f64"></label>
+                <label for="join_color">Join <input type="color" id="join_color" value="#6fb0d6"></label>
+                <button type="button" id="reset_tree_colors" class="btn btn-outline-secondary btn-sm">Reset block colors</button>
+            </div>
+        </div>
+    </div>
     <div class="d-flex align-items-center justify-content-end gap-2 mb-2 flex-wrap">
-        <small class="text-muted me-auto">Drag column edges to resize</small>
+        <small class="text-muted me-auto">Drag column edges to resize · Right-click cells to color</small>
         <button type="button" id="btn_reset_columns" class="btn btn-outline-secondary btn-sm">Reset column widths</button>
         <button type="button" id="btn_hierarchy_notes" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#hierarchyNotesModal">Hierarchy Notes</button>
     </div>
@@ -157,10 +196,6 @@
                     <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>
                     <span>Copy Shareable URL</span>
                 </button>
-                <button type="button" class="btn btn-outline-secondary action-button" id="colors_word_open" aria-label="Change Colors" aria-expanded="false" aria-controls="color_panel">
-                    <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1-4 2 2 0 0 1 1-4h3a3 3 0 0 0 3-3c0-4-4-7-9-7Z"/><circle cx="7" cy="10" r="1"/><circle cx="11" cy="7" r="1"/><circle cx="16" cy="8" r="1"/></svg>
-                    <span>Change Colors &#187;</span>
-                </button>
             </div>
             <div id="whats_new">
                 <a title="Released 2025-05-19" class="link-success" href="https://github.com/ckabalan/visualsubnetcalc/releases" target="_blank" rel="noopener noreferrer" aria-label="What's New">v1.4.0 (What's New?)</a>
@@ -174,26 +209,12 @@
                 <button id="select_share_url" type="button" class="btn btn-outline-primary">Select link</button>
             </div>
         </div>
-        <div id="color_panel" class="color-panel" hidden>
-            <div class="color-panel-heading">
-                <div><strong>Row colors</strong><p id="color_hint" class="small text-secondary mb-0">Pick a color, then click a subnet row to apply it.</p></div>
-                <button type="button" class="btn btn-outline-secondary btn-sm" id="colors_word_close" aria-label="Stop Changing Colors"><span>&#171; Stop Changing Colors</span></button>
-            </div>
-        <div id="color_palette" aria-label="Color Palette">
-            <div role="button" aria-label="Color 1" id="palette_picker_1"></div>
-            <div role="button" aria-label="Color 2" id="palette_picker_2"></div>
-            <div role="button" aria-label="Color 3" id="palette_picker_3"></div>
-            <div role="button" aria-label="Color 4" id="palette_picker_4"></div>
-            <div role="button" aria-label="Color 5" id="palette_picker_5"></div>
-            <div role="button" aria-label="Color 6" id="palette_picker_6"></div>
-            <div role="button" aria-label="Color 7" id="palette_picker_7"></div>
-            <div role="button" aria-label="Color 8" id="palette_picker_8"></div>
-            <div role="button" aria-label="Color 9" id="palette_picker_9"></div>
-            <div role="button" aria-label="Color 10" id="palette_picker_10"></div>
-            <label class="custom-color-label" for="custom_color">Custom color</label>
-            <input type="color" id="custom_color" value="#b3e5fc" aria-label="Custom color">
-        </div>
-        </div>
+    </div>
+    <div id="quick_colors" class="quick-colors" role="dialog" aria-label="Quick cell colors" hidden>
+        <div class="d-flex justify-content-between align-items-center gap-2"><strong>Cell color</strong><button type="button" class="btn-close" id="close_quick_colors" aria-label="Close quick colors"></button></div>
+        <div id="quick_swatches" class="quick-swatches"></div>
+        <div class="d-flex align-items-center gap-2 flex-wrap"><label for="quick_custom_color">Custom</label><input type="color" id="quick_custom_color" value="#b3e5fc"><button type="button" id="clear_cell_color" class="btn btn-outline-secondary btn-sm">Reset cell</button></div>
+        <small class="text-secondary">Choose a color to apply immediately.</small>
     </div>
 
 
