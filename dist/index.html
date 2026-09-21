@@ -95,7 +95,7 @@
                         pattern="^([0-9]|[12][0-9]|3[0-2])$"
                         required></div>
         </div>
-        <div class="col-lg-2 col-md-3 col-3 font-">
+        <div class="col-auto">
             <div style="height:1.5rem"></div>
             <div>
                 <button id="btn_go" class="btn btn-success mb-0 mt-auto" type="button">Go</button>
@@ -109,11 +109,10 @@
                         <li><a class="dropdown-item" href="#" data-bs-toggle="operatingMode" data-bs-target="#operatingMode" id="dropdown_azure">Mode - Azure</a></li>
                         <li><a class="dropdown-item" href="#" data-bs-toggle="operatingMode" data-bs-target="#operatingMode" id="dropdown_oci">Mode - OCI</a></li>
                         <li><a class="dropdown-item" href="#" data-bs-toggle="operatingMode" data-bs-target="#operatingMode" id="dropdown_huawei">Mode - Huawei Cloud</a></li>
-                        <li><hr class="dropdown-divider"></li>
-                        <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#importExportModal" id="btn_import_export">Import / Export</a></li>
-                        <li><a class="dropdown-item" href="#" id="btn_export_excel">Export to Excel</a></li>
                     </ul>
                 </div>
+                <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#importExportModal" id="btn_import_export">Import / Export</button>
+                <button type="button" class="btn btn-outline-success" id="btn_export_excel">Export to Excel</button>
             </div>
         </div>
     </form>
@@ -131,8 +130,7 @@
                 <th aria-label="Range of Addresses" id="rangeHeader" style="display: table-cell;">Range of Addresses</th>
                 <th aria-label="Usable IPs" id="useableHeader" style="display: table-cell;">Usable IPs</th>
                 <th aria-label="Hosts" id="hostsHeader" style="display: table-cell;">Hosts</th>
-                <th aria-label="Note" id="noteHeader" colspan="100%" style="display: table-cell;">
-                    Note
+                <th aria-label="Split / Join" colspan="100%" style="display: table-cell;">
                     <div style="float:right;"><span id="splitHeader" aria-label="Split" class="split">Split</span>/<span id="joinHeader" aria-label="Join" class="join">Join</span></div>
                 </th>
             </tr>
@@ -143,7 +141,6 @@
                 <td aria-labelledby="rangeHeader" class="row_range"></td>
                 <td aria-labelledby="useableHeader" class="row_usable"></td>
                 <td aria-labelledby="hostsHeader" class="row_hosts"></td>
-                <td class="note"><label><input aria-labelledby="noteHeader" type="text" class="form-control shadow-none p-0"></label></td>
                 <td aria-labelledby="splitHeader" rowspan="1" colspan="13" class="split rotate"><span></span></td>
                 <td aria-labelledby="joinHeader" rowspan="14" colspan="1" class="join rotate"><span></span></td>
             </tr>
@@ -163,6 +160,8 @@
             <div role="button" aria-label="Color 8" id="palette_picker_8"></div>
             <div role="button" aria-label="Color 9" id="palette_picker_9"></div>
             <div role="button" aria-label="Color 10" id="palette_picker_10"></div>
+            <label class="custom-color-label" for="custom_color">Custom color</label>
+            <input type="color" id="custom_color" value="#b3e5fc" aria-label="Custom color">
         </div>
         <div class="d-inline-block align-top align-top pt-1 ps-2 d-none" id="colors_word_close" aria-label="Stop Changing Colors"><span>&#171; Stop Changing Colors</span></div>
         <div class="d-inline-block align-top pt-1 ps-3" id="copy_url"><span>Copy Shareable URL</span></div>

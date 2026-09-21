@@ -28,7 +28,7 @@ and the deployment completes.
 
 ## Export to Excel
 
-Choose **Tools → Export to Excel** to download the current subnet table as an `.xlsx` file
+Choose **Export to Excel** next to Tools to download the current subnet table as an `.xlsx` file
 (for example, `10.0.0.0_16.xlsx`). The workbook includes subnet addresses, address ranges,
 usable IPs for the selected mode, numeric host counts, and notes.
 The **Subnets** sheet preserves row highlight colors and the orange Split / blue Join
@@ -37,10 +37,10 @@ and independent note.
 
 ## Notes at Each Level
 
-The main table's Note column shows only the current subnet note. Click **Hierarchy Notes**
-or edit directly inside the orange Split and blue Join blocks. The horizontal prefix
+Edit notes directly inside the orange Split and blue Join blocks, or click **Hierarchy Notes**.
+The main table has no separate Note column. The horizontal prefix
 button performs the split/join action; typing in the adjacent note does not change
-the subnet structure. Leaf notes stay synchronized with the Note column.
+the subnet structure. Excel retains a Note field for convenient filtering and reading.
 Use **Hierarchy Notes**
 above the table to edit all levels in a scrollable panel. Each subnet appears once,
 with its level and a collapsible branch; edits apply immediately to the current design.
@@ -49,6 +49,12 @@ parent note and initially copies it to both children; each level can then be edi
 independently. Joining restores the parent's note (older configurations without a
 parent note use matching child notes). JSON export/import and shareable URLs retain
 all levels of notes.
+
+## Colors and File Controls
+
+**Import / Export** and **Export to Excel** are visible buttons beside Tools.
+**Change Colors** offers 24 preset colors and a custom color picker. Select a color,
+then click a subnet's address, range, usable IPs, or host count to apply it.
 
 ## Cloud Subnet Notes
 

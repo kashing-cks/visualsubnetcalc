@@ -39,11 +39,11 @@ test('Independent notes survive split, URL, JSON, network change and join', asyn
   await page.goto('/');
   await mode(page, 'Huawei Cloud');
   const parentNote = '父層 <網路> "測試" & =1+1';
-  await page.locator('input.leaf-note').fill(parentNote);
+  await page.locator('td.split input').fill(parentNote);
   await page.locator('td.split .subnet-action').click();
-  await page.locator('input.leaf-note').first().fill('子層');
+  await page.locator('td.split input').first().fill('子層');
   await page.locator('td.split .subnet-action').first().click();
-  await page.locator('input.leaf-note').first().fill('孫層');
+  await page.locator('td.split input').first().fill('孫層');
   await page.locator('#btn_hierarchy_notes').click();
   const parent = page.getByRole('textbox', { name: '10.0.0.0/16 Hierarchy Note', exact: true });
   await parent.fill(parentNote + ' 更新');
@@ -55,7 +55,7 @@ test('Independent notes survive split, URL, JSON, network change and join', asyn
   await page.locator('#btn_hierarchy_notes').click();
   await expect(parent).toHaveValue(parentNote + ' 更新');
   await page.getByRole('button', { name: 'Done', exact: true }).click();
-  await expect(page.locator('input.leaf-note').first()).toHaveValue('孫層');
+  await expect(page.locator('td.split input').first()).toHaveValue('孫層');
   await page.getByRole('button', { name: 'Tools' }).click();
   await page.locator('#btn_import_export').click();
   const config = await page.locator('#importExportArea').inputValue();
@@ -70,9 +70,9 @@ test('Independent notes survive split, URL, JSON, network change and join', asyn
   await expect(page.getByRole('textbox', { name: '192.168.0.0/16 Hierarchy Note', exact: true })).toHaveValue(parentNote + ' 更新');
   await page.getByRole('button', { name: 'Done', exact: true }).click();
   await page.getByRole('button', { name: 'Join 192.168.0.0/17', exact: true }).click();
-  await expect(page.locator('input.leaf-note').first()).toHaveValue('子層');
+  await expect(page.locator('td.split input').first()).toHaveValue('子層');
   await page.getByRole('button', { name: 'Join 192.168.0.0/16', exact: true }).click();
-  await expect(page.locator('input.leaf-note')).toHaveValue(parentNote + ' 更新');
+  await expect(page.locator('td.split input')).toHaveValue(parentNote + ' 更新');
   await mode(page, 'Standard');
   await expect(page.locator('#dropdown_huawei')).not.toHaveClass(/active/);
 });
@@ -81,7 +81,8 @@ test('Deep splits keep the main table compact and notes appear once in the panel
   await page.goto('/');
   for (let i = 0; i < 5; i++) await page.locator('td.split .subnet-action').first().click();
   await expect(page.locator('#calcbody tr')).toHaveCount(6);
-  await expect(page.locator('#calcbody td.note input')).toHaveCount(6);
+  await expect(page.locator('#calcbody td.note')).toHaveCount(0);
+  await expect(page.locator('#calcbody td.split input')).toHaveCount(6);
   await expect(page.locator('#calcbody .join input')).toHaveCount(5);
   expect(await page.locator('#calcbody tr').first().evaluate(row => row.getBoundingClientRect().height)).toBeLessThan(65);
   await page.locator('#btn_hierarchy_notes').click();
@@ -96,8 +97,8 @@ test('Deep splits keep the main table compact and notes appear once in the panel
   await page.getByRole('button', { name: 'Toggle 10.0.0.0/16', exact: true }).click();
   await expect(leaf).toHaveValue('Leaf note');
   await page.getByRole('button', { name: 'Done', exact: true }).click();
-  await expect(page.locator('input.leaf-note').first()).toHaveValue('Leaf note');
-  await page.locator('input.leaf-note').first().fill('Updated from table');
+  await expect(page.locator('td.split input').first()).toHaveValue('Leaf note');
+  await page.locator('td.split input').first().fill('Updated from table');
   await page.locator('#btn_hierarchy_notes').click();
   await expect(leaf).toHaveValue('Updated from table');
   await expect(root).toHaveValue('Root note');
@@ -113,7 +114,7 @@ test('Split and Join notes edit in place without changing structure', async ({ p
   await root.fill('VPC');
   await root.press('Enter');
   await expect(page.locator('#calcbody tr')).toHaveCount(1);
-  await expect(page.locator('input.leaf-note')).toHaveValue('VPC');
+  await expect(root).toHaveValue('VPC');
   await page.getByRole('button', { name: 'Split 10.0.0.0/16', exact: true }).click();
   const parent = page.getByRole('textbox', { name: '10.0.0.0/16 Join Note', exact: true });
   await parent.fill('HK "&<>"');
@@ -122,8 +123,9 @@ test('Split and Join notes edit in place without changing structure', async ({ p
   await expect(page.locator('td.join')).toHaveAttribute('rowspan', '2');
   const leaf = page.getByRole('textbox', { name: '10.0.0.0/17 Split Note', exact: true });
   await leaf.fill('Production');
-  await expect(page.locator('input.leaf-note').first()).toHaveValue('Production');
-  await page.locator('input.leaf-note').first().fill('Updated');
+  await page.locator('#btn_hierarchy_notes').click();
+  await page.getByRole('textbox', { name: '10.0.0.0/17 Hierarchy Note', exact: true }).fill('Updated');
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
   await expect(leaf).toHaveValue('Updated');
   await expect(page.locator('.join .subnet-action span')).toHaveCSS('writing-mode', 'horizontal-tb');
   await expect(page.locator('.split .subnet-action span').first()).toHaveCSS('writing-mode', 'horizontal-tb');

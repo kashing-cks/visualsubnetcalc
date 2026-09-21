@@ -1,7 +1,7 @@
 let subnetMap = {};
 let subnetNotes = {};
 let maxNetSize = 0;
-let infoColumnCount = 5
+let infoColumnCount = 4
 // NORMAL mode:
 //   - Smallest subnet: /32
 //   - Two reserved addresses per subnet of size <= 30:
@@ -75,10 +75,28 @@ $('input#network,input#netsize').on('input', function() {
     $('#input_form')[0].classList.add('was-validated');
 })
 
-$('#color_palette div').on('click', function() {
+const extraColors = ['#f8bbd0', '#e1bee7', '#d1c4e9', '#c5cae9', '#bbdefb', '#b3e5fc', '#b2ebf2', '#b2dfdb', '#c8e6c9', '#dcedc8', '#fff9c4', '#ffecb3', '#ffe0b2', '#d7ccc8']
+extraColors.forEach((color, index) => {
+    $('<button>', { type: 'button', id: 'palette_picker_' + (index + 11), 'aria-label': 'Color ' + (index + 11), title: color })
+        .css('background-color', color).insertBefore('#color_palette .custom-color-label')
+})
+$('#color_palette div[role="button"]').attr('tabindex', '0')
+$('#color_palette').on('keydown', 'div[role="button"]', function(event) {
+    if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault()
+        this.click()
+    }
+})
+$('#color_palette').on('click', '[id^="palette_picker_"]', function() {
     // We don't really NEED to convert this to hex, but it's really low overhead to do the
     // conversion here and saves us space in the export/save
     inflightColor = rgba2hex($(this).css('background-color'))
+    $('#color_palette [id^="palette_picker_"]').attr('aria-pressed', 'false')
+    $(this).attr('aria-pressed', 'true')
+})
+$('#custom_color').on('input change', function() {
+    inflightColor = this.value
+    $('#color_palette [id^="palette_picker_"]').attr('aria-pressed', 'false')
 })
 
 $('#calcbody').on('click', '.row_address, .row_range, .row_usable, .row_hosts, .note, input', function(event) {
@@ -232,6 +250,12 @@ function buildExcelSubnetSheet() {
         let c = 0
         sheet['!rows'][r] = { hpt: 45 }
         for (const cell of row.cells) {
+            // Keep the useful Note field in Excel, sourced from the inline Split editor.
+            if (c === 4) {
+                const cidr = row.querySelector('.row_address').dataset.subnet
+                sheet[XLSX.utils.encode_cell({ r, c })] = excelCell(getSubnetNode(cidr)._note || '', excelBackground(row))
+                c++
+            }
             while (sheet[XLSX.utils.encode_cell({ r, c })]) c++
             const treeCell = cell.matches('.split, .join')
             const columnSpan = cell.matches('.split') ? Math.max(1, cell.colSpan - infoColumnCount) : cell.colSpan
@@ -369,7 +393,7 @@ $('#calcbody').on('click', '.subnet-action', function(event) {
     renderTable(operatingMode);
 })
 
-$('#calcbody').on('input', 'td.note input, input.block-note', updateNoteEditors)
+$('#calcbody').on('input', 'input.block-note', updateNoteEditors)
 
 $('#hierarchyNotesModal').on('show.bs.modal', function() {
     renderHierarchyNotes()
@@ -381,7 +405,7 @@ function updateNoteEditors() {
     mutate_subnet_map('note', this.dataset.subnet, '', this.value)
     const subnet = this.dataset.subnet
     const value = this.value
-    $('#calcbody input.leaf-note, #calcbody input.block-note, #hierarchy_notes_tree input').each(function() {
+    $('#calcbody input.block-note, #hierarchy_notes_tree input').each(function() {
         if (this.dataset.subnet === subnet) this.value = value
     })
 }
@@ -505,7 +529,6 @@ function addRow(network, netSize, colspan, note, notesWidth, color, operatingMod
         '                <td data-subnet="' + rowCIDR + '" aria-labelledby="' + rowId + ' rangeHeader" class="row_range">' + rangeCol + '</td>\n' +
         '                <td data-subnet="' + rowCIDR + '" aria-labelledby="' + rowId + ' useableHeader" class="row_usable">' + usableCol + '</td>\n' +
         '                <td data-subnet="' + rowCIDR + '" aria-labelledby="' + rowId + ' hostsHeader" class="row_hosts">' + hostCount + '</td>\n' +
-        '                <td class="note" style="width:' + notesWidth + '"><label><input aria-labelledby="' + rowId + ' noteHeader" type="text" class="leaf-note form-control shadow-none p-0" data-subnet="' + rowCIDR + '" value="' + escapeHtml(note) + '"></label></td>\n' +
         '                <td data-subnet="' + rowCIDR + '" aria-labelledby="' + rowId + ' splitHeader" rowspan="1" colspan="' + colspan + '" class="split" data-mutate-verb="split">' + subnetBlockEditor(rowCIDR, 'Split', note) + '</td>\n'
     if (netSize > maxNetSize) {
         // This is wrong. Need to figure out a way to get the number of children so you can set rowspan and the number

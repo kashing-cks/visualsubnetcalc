@@ -100,9 +100,32 @@
     white-space: nowrap;
 }
 
-#color_palette div[id^='palette_picker_'] {
+#color_palette [id^='palette_picker_'] {
     width:2rem;
+    height:2rem;
+    display:inline-block;
+    vertical-align:middle;
     border:1px solid;
+    cursor:pointer;
+}
+
+#color_palette [aria-pressed='true'] {
+    outline: 3px solid #175985;
+    outline-offset: 1px;
+}
+
+#color_palette {
+    max-width: 100%;
+}
+
+#custom_color {
+    width: 3rem;
+    height: 2rem;
+    vertical-align: middle;
+}
+
+.custom-color-label {
+    margin-left: 0.5rem;
 }
 
 #color_palette #palette_picker_1 {
