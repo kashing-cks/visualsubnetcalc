@@ -95,9 +95,9 @@
                         pattern="^([0-9]|[12][0-9]|3[0-2])$"
                         required></div>
         </div>
-        <div class="col-auto">
+        <div class="col-auto network-actions">
             <div style="height:1.5rem"></div>
-            <div>
+            <div class="d-flex flex-wrap gap-1">
                 <button id="btn_go" class="btn btn-success mb-0 mt-auto" type="button">Go</button>
                 <div class="dropdown d-inline">
                     <button class="btn btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
@@ -119,18 +119,21 @@
 
 
 
-    <div class="d-flex justify-content-end mb-2">
+    <div class="d-flex align-items-center justify-content-end gap-2 mb-2 flex-wrap">
+        <small class="text-muted me-auto">Drag column edges to resize</small>
+        <button type="button" id="btn_reset_columns" class="btn btn-outline-secondary btn-sm">Reset column widths</button>
         <button type="button" id="btn_hierarchy_notes" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#hierarchyNotesModal">Hierarchy Notes</button>
     </div>
     <div class="table-responsive">
     <table id="calc" class="table table-bordered font-monospace" aria-label="Subnet Table">
+        <colgroup id="calc_columns"></colgroup>
         <thead>
             <tr>
                 <th aria-label="Subnet Address" id="subnetHeader" style="display: table-cell;">Subnet Address</th>
                 <th aria-label="Range of Addresses" id="rangeHeader" style="display: table-cell;">Range of Addresses</th>
                 <th aria-label="Usable IPs" id="useableHeader" style="display: table-cell;">Usable IPs</th>
                 <th aria-label="Hosts" id="hostsHeader" style="display: table-cell;">Hosts</th>
-                <th aria-label="Split / Join" colspan="100%" style="display: table-cell;">
+                <th id="treeHeader" aria-label="Split / Join" colspan="1" style="display: table-cell;">
                     <div style="float:right;"><span id="splitHeader" aria-label="Split" class="split">Split</span>/<span id="joinHeader" aria-label="Join" class="join">Join</span></div>
                 </th>
             </tr>
@@ -147,9 +150,36 @@
         </tbody>
     </table>
     </div>
-    <div id="bottom_nav">
-        <div class="d-inline-block align-top pt-1" id="colors_word_open" aria-label="Change Colors"><span>Change Colors &#187;</span></div>
-        <div class="d-inline-block d-none" id="color_palette" aria-label="Color Palette">
+    <div id="bottom_nav" aria-label="Design actions">
+        <div class="design-toolbar">
+            <div class="design-actions">
+                <button type="button" class="btn btn-primary action-button" id="copy_url">
+                    <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>
+                    <span>Copy Shareable URL</span>
+                </button>
+                <button type="button" class="btn btn-outline-secondary action-button" id="colors_word_open" aria-label="Change Colors" aria-expanded="false" aria-controls="color_panel">
+                    <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1-4 2 2 0 0 1 1-4h3a3 3 0 0 0 3-3c0-4-4-7-9-7Z"/><circle cx="7" cy="10" r="1"/><circle cx="11" cy="7" r="1"/><circle cx="16" cy="8" r="1"/></svg>
+                    <span>Change Colors &#187;</span>
+                </button>
+            </div>
+            <div id="whats_new">
+                <a title="Released 2025-05-19" class="link-success" href="https://github.com/ckabalan/visualsubnetcalc/releases" target="_blank" rel="noopener noreferrer" aria-label="What's New">v1.4.0 (What's New?)</a>
+            </div>
+        </div>
+        <p id="share_status" class="small mb-0" role="status" aria-live="polite"></p>
+        <div id="share_fallback" class="share-fallback" hidden>
+            <label for="share_url" class="form-label">Shareable URL — select and copy this link</label>
+            <div class="d-flex gap-2">
+                <input id="share_url" type="text" class="form-control" readonly spellcheck="false">
+                <button id="select_share_url" type="button" class="btn btn-outline-primary">Select link</button>
+            </div>
+        </div>
+        <div id="color_panel" class="color-panel" hidden>
+            <div class="color-panel-heading">
+                <div><strong>Row colors</strong><p id="color_hint" class="small text-secondary mb-0">Pick a color, then click a subnet row to apply it.</p></div>
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="colors_word_close" aria-label="Stop Changing Colors"><span>&#171; Stop Changing Colors</span></button>
+            </div>
+        <div id="color_palette" aria-label="Color Palette">
             <div role="button" aria-label="Color 1" id="palette_picker_1"></div>
             <div role="button" aria-label="Color 2" id="palette_picker_2"></div>
             <div role="button" aria-label="Color 3" id="palette_picker_3"></div>
@@ -163,10 +193,6 @@
             <label class="custom-color-label" for="custom_color">Custom color</label>
             <input type="color" id="custom_color" value="#b3e5fc" aria-label="Custom color">
         </div>
-        <div class="d-inline-block align-top align-top pt-1 ps-2 d-none" id="colors_word_close" aria-label="Stop Changing Colors"><span>&#171; Stop Changing Colors</span></div>
-        <div class="d-inline-block align-top pt-1 ps-3" id="copy_url"><span>Copy Shareable URL</span></div>
-        <div class="d-inline-block align-top pt-1 ps-3" id="whats_new">
-            <a title="Released 2025-05-19" class="link-success" href="https://github.com/ckabalan/visualsubnetcalc/releases" target="_blank" rel="noopener noreferrer" aria-label="What's New">v1.4.0 (What's New?)</a>
         </div>
     </div>
 

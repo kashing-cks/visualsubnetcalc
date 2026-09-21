@@ -23,6 +23,17 @@ Huawei Cloud mode, per-level notes, an Excel export and a simplified control lay
 - **Resizable columns** — drag a column edge (or use the arrow keys) to fit longer notes;
   **Reset column widths** restores the default layout.
 
+The layout uses the available window width and reflows when you zoom in Chrome.
+Manually resized columns scale proportionally with the table container, with minimum
+widths for readability and horizontal scrolling for large hierarchies.
+
+## Sharing a Design
+
+Use **Copy Shareable URL** in the action bar below the table. The link retains the
+site's deployment path, including GitHub Pages project directories. Success is
+shown only after copying completes; if clipboard access is unavailable, a selectable
+link appears for manual copying with Ctrl+C / ⌘C.
+
 ## Notes at Each Level
 
 The table has no separate Note column; notes are edited where they belong:
@@ -43,6 +54,8 @@ shareable URLs retain every level.
 Click **Change Colors »** below the table, pick one of the 24 presets or a custom colour, then click
 a subnet's address, range, usable IPs or host count to apply it. Colours are inherited when a subnet
 is split and are preserved in JSON, shareable URLs and the Excel export.
+The expandable colour panel shows the selected colour and a **Stop Changing Colors**
+button to finish. The action bar and palette wrap to fit smaller screens.
 
 ## Export to Excel
 
@@ -51,7 +64,7 @@ Choose **Export to Excel** beside the Tools menu to download the current design 
 
 | Sheet | Contents |
 | ----- | -------- |
-| **Subnets** | Subnet address, address range, usable IPs for the active mode, host count, note, and the orange/blue Split–Join tree with its colours and merged cells. |
+| **Subnets** | Subnet address, address range, usable IPs for the active mode, host count, and the orange/blue hierarchy with its colours and merged cells. Each block contains its prefix and note, without Split/Join labels or a separate Note column. |
 | **Hierarchy Notes** | Every subnet with its level, parent subnet and note — convenient for filtering and reading. |
 
 ## Operating Modes

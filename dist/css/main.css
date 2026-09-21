@@ -44,60 +44,77 @@
 }
 
 #bottom_nav {
-    height:2rem;
+    margin: 0.5rem 0 1.5rem;
+    padding: 1rem;
+    border: 1px solid #dce3ec;
+    border-radius: 0.75rem;
+    background: #f8fafc;
 }
 
-#bottom_nav span {
-    border-bottom:1px black dotted;
+.design-toolbar, .design-actions, .color-panel-heading {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.design-toolbar, .color-panel-heading {
+    justify-content: space-between;
+}
+
+.action-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 2.75rem;
+    border-radius: 0.5rem;
+}
+
+.action-button svg {
+    flex-shrink: 0;
+}
+
+#colors_word_open[aria-expanded='true'] {
+    background: #e7eff9;
+    border-color: #175985;
+    color: #175985;
 }
 
 #whats_new {
-    cursor:pointer !important;
-    text-align: right;
-    width:15rem;
-    float:right;
+    font-size: 0.875rem;
 }
 
 #whats_new a {
-    width:15rem;
-    text-align: right;
     text-decoration: none;
-    border-bottom:1px var(--bs-success) dotted;
 }
 
-
-#copy_url {
-    cursor:pointer !important;
-    text-align: center;
-    width:11rem;
+#share_status:not(:empty), .share-fallback, .color-panel {
+    margin-top: 0.75rem;
 }
 
-#copy_url span {
-    width:11rem;
-    text-align: center;
+.color-panel {
+    border-top: 1px solid #dce3ec;
+    padding-top: 1rem;
+}
+
+.color-panel-heading {
+    margin-bottom: 0.75rem;
 }
 
 #color_palette {
-    min-width: 0rem;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
 }
 
-#color_palette #colors_word_close {
-    line-height: 2rem;
-    cursor:pointer;
+#share_url {
+    min-width: 0;
 }
 
-#color_palette #colors_word_open {
-    display:inline-block;
-    height:2rem;
-    cursor:pointer;
-    white-space: nowrap;
-}
-
-#color_palette div {
-    display:inline-block;
-    height:2rem;
-    cursor:pointer;
-    white-space: nowrap;
+#select_share_url {
+    flex-shrink: 0;
 }
 
 #color_palette [id^='palette_picker_'] {
@@ -107,6 +124,8 @@
     vertical-align:middle;
     border:1px solid;
     cursor:pointer;
+    border-radius: 0.4rem;
+    flex-shrink: 0;
 }
 
 #color_palette [aria-pressed='true'] {
@@ -160,7 +179,28 @@
 }
 
 .container-xxl {
-    min-width: 576px;
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    padding-inline: clamp(0.75rem, 2.5vw, 3rem);
+}
+
+.network-actions {
+    max-width: 100%;
+}
+
+#calc.color-mode .row_address, #calc.color-mode .row_range,
+#calc.color-mode .row_usable, #calc.color-mode .row_hosts {
+    cursor: crosshair;
+}
+
+@media (max-width: 575px) {
+    #navigation svg { width: 28px; height: 28px; }
+    h1 { font-size: 1.5rem; }
+    .design-actions { width: 100%; }
+    .design-actions .btn { flex: 1 1 12rem; }
+    #bottom_nav { padding: 0.75rem; }
+    #input_form > .col-4 { flex: 1 1 8rem; }
 }
 
 #navigation a {
@@ -179,6 +219,38 @@
 
 #calc {
     vertical-align: middle;
+    table-layout: fixed;
+}
+
+#calc th, #calc td.split, #calc td.join {
+    position: relative;
+}
+
+#calc th {
+    overflow-wrap: anywhere;
+}
+
+#calc .column-resizer {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 8px;
+    cursor: col-resize;
+    touch-action: none;
+    z-index: 1;
+    border-right: 2px solid #17598555;
+}
+
+#calc .column-resizer:hover, #calc .column-resizer:focus-visible {
+    background: #17598555;
+    outline: 2px solid #175985;
+    outline-offset: -2px;
+}
+
+body.resizing-columns, body.resizing-columns * {
+    cursor: col-resize !important;
+    user-select: none !important;
 }
 
 #calc>tbody>tr>td, #calc>tbody>tr>th, #calc>tfoot>tr>td, #calc>tfoot>tr>th, #calc>thead>tr>td, #calc>thead>tr>th {
@@ -238,11 +310,12 @@
     display: flex;
     align-items: center;
     gap: 0.25rem;
-    min-width: 7.5rem;
-    padding: 0.25rem;
+    min-width: 0;
+    padding: 0.25rem 0.65rem 0.25rem 0.25rem;
 }
 
 #calc .subnet-action {
+    flex-shrink: 0;
     border: 0;
     border-radius: 0.2rem;
     background: transparent;

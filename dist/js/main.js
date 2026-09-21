@@ -2,6 +2,9 @@ let subnetMap = {};
 let subnetNotes = {};
 let maxNetSize = 0;
 let infoColumnCount = 4
+const tableColumnWidths = new Map()
+let tableColumns = []
+let tableWidthReference = 0
 // NORMAL mode:
 //   - Smallest subnet: /32
 //   - Two reserved addresses per subnet of size <= 30:
@@ -93,10 +96,14 @@ $('#color_palette').on('click', '[id^="palette_picker_"]', function() {
     inflightColor = rgba2hex($(this).css('background-color'))
     $('#color_palette [id^="palette_picker_"]').attr('aria-pressed', 'false')
     $(this).attr('aria-pressed', 'true')
+    $('#color_hint').text('Selected ' + inflightColor.toUpperCase() + ' — click a subnet row to apply it.')
+    $('#calc').addClass('color-mode')
 })
 $('#custom_color').on('input change', function() {
     inflightColor = this.value
     $('#color_palette [id^="palette_picker_"]').attr('aria-pressed', 'false')
+    $('#color_hint').text('Selected ' + inflightColor.toUpperCase() + ' — click a subnet row to apply it.')
+    $('#calc').addClass('color-mode')
 })
 
 $('#calcbody').on('click', '.row_address, .row_range, .row_usable, .row_hosts, .note, input', function(event) {
@@ -239,32 +246,25 @@ function excelBackground(element) {
 
 function buildExcelSubnetSheet() {
     const sheet = { '!merges': [], '!rows': [{ hpt: 30 }] }
-    const headers = ['Subnet Address', 'Range of Addresses', $('#useableHeader').text(), 'Hosts', 'Note']
+    const headers = ['Subnet Address', 'Range of Addresses', $('#useableHeader').text(), 'Hosts']
     headers.forEach((value, c) => { sheet[XLSX.utils.encode_cell({ r: 0, c })] = excelCell(value, 'E9ECEF', true) })
-    let lastColumn = 5
-    // Keep one Excel column per tree level. The HTML Split colspan also includes
-    // infoColumnCount layout-only columns, which must not become Excel columns.
+    const treeStartColumn = headers.length
+    let lastColumn = treeStartColumn
+    // Keep one Excel column per tree level, matching the HTML table columns.
     // Covered cells are also styled so merged ranges keep their complete fill/border.
     document.querySelectorAll('#calcbody tr').forEach((row, index) => {
         const r = index + 1
         let c = 0
         sheet['!rows'][r] = { hpt: 45 }
         for (const cell of row.cells) {
-            // Keep the useful Note field in Excel, sourced from the inline Split editor.
-            if (c === 4) {
-                const cidr = row.querySelector('.row_address').dataset.subnet
-                sheet[XLSX.utils.encode_cell({ r, c })] = excelCell(getSubnetNode(cidr)._note || '', excelBackground(row))
-                c++
-            }
             while (sheet[XLSX.utils.encode_cell({ r, c })]) c++
             const treeCell = cell.matches('.split, .join')
-            const columnSpan = cell.matches('.split') ? Math.max(1, cell.colSpan - infoColumnCount) : cell.colSpan
-            const note = cell.querySelector('input.leaf-note')
-            let value = note ? note.value : cell.textContent.trim()
+            const columnSpan = cell.colSpan
+            let value = cell.textContent.trim()
             if (cell.matches('.row_hosts')) value = Number(value)
             if (treeCell) {
                 const node = getSubnetNode(cell.dataset.subnet)
-                value = (cell.matches('.split') ? 'Split /' : 'Join /') + cell.dataset.subnet.split('/')[1]
+                value = '/' + cell.dataset.subnet.split('/')[1]
                 if (node && node._note) value += '\n' + node._note
             }
             const background = excelBackground(treeCell ? cell : row)
@@ -280,12 +280,12 @@ function buildExcelSubnetSheet() {
             lastColumn = Math.max(lastColumn, c - 1)
         }
     })
-    for (let c = 5; c <= lastColumn; c++) {
-        sheet[XLSX.utils.encode_cell({ r: 0, c })] = excelCell(c === 5 ? 'Split / Join' : '', 'E9ECEF', true)
+    for (let c = treeStartColumn; c <= lastColumn; c++) {
+        sheet[XLSX.utils.encode_cell({ r: 0, c })] = excelCell('', 'E9ECEF', true)
     }
-    if (lastColumn > 5) sheet['!merges'].push({ s: { r: 0, c: 5 }, e: { r: 0, c: lastColumn } })
-    sheet['!cols'] = [{ wch: 20 }, { wch: 38 }, { wch: 38 }, { wch: 12 }, { wch: 40 }]
-        .concat(Array.from({ length: lastColumn - 4 }, () => ({ wch: 12 })))
+    if (lastColumn > treeStartColumn) sheet['!merges'].push({ s: { r: 0, c: treeStartColumn }, e: { r: 0, c: lastColumn } })
+    sheet['!cols'] = [{ wch: 20 }, { wch: 38 }, { wch: 38 }, { wch: 12 }]
+        .concat(Array.from({ length: lastColumn - treeStartColumn + 1 }, () => ({ wch: 12 })))
     sheet['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: document.querySelectorAll('#calcbody tr').length, c: lastColumn } })
     return sheet
 }
@@ -309,27 +309,76 @@ function buildExcelNotesSheet() {
 }
 
 $('#bottom_nav #colors_word_open').on('click', function() {
-    $('#bottom_nav #color_palette').removeClass('d-none');
-    $('#bottom_nav #colors_word_close').removeClass('d-none');
-    $('#bottom_nav #colors_word_open').addClass('d-none');
+    setColorPanel(document.getElementById('color_panel').hidden)
 })
 
 $('#bottom_nav #colors_word_close').on('click', function() {
-    $('#bottom_nav #color_palette').addClass('d-none');
-    $('#bottom_nav #colors_word_close').addClass('d-none');
-    $('#bottom_nav #colors_word_open').removeClass('d-none');
-    inflightColor = 'NONE'
+    setColorPanel(false)
+    document.getElementById('colors_word_open').focus()
 })
 
-$('#bottom_nav #copy_url').on('click', function() {
-    // TODO: Provide a warning here if the URL is longer than 2000 characters, probably using a modal.
-    let url = window.location.origin + getConfigUrl()
-    navigator.clipboard.writeText(url);
-    $('#bottom_nav #copy_url span').text('Copied!')
-    // Swap the text back after 3sec
-    setTimeout(function(){
-        $('#bottom_nav #copy_url span').text('Copy Shareable URL')
-    }, 2000)
+function setColorPanel(open) {
+    document.getElementById('color_panel').hidden = !open
+    $('#colors_word_open').attr('aria-expanded', String(open))
+    if (!open) {
+        inflightColor = 'NONE'
+        $('#calc').removeClass('color-mode')
+        $('#color_palette [id^="palette_picker_"]').attr('aria-pressed', 'false')
+        $('#color_hint').text('Pick a color, then click a subnet row to apply it.')
+    }
+}
+
+let copyStatusTimer
+$('#bottom_nav #copy_url').on('click', async function() {
+    clearTimeout(copyStatusTimer)
+    const button = this
+    const url = new URL(getConfigUrl(), window.location.href).href
+    const input = document.getElementById('share_url')
+    const fallback = document.getElementById('share_fallback')
+    input.value = url
+    fallback.hidden = true
+    button.disabled = true
+    $('#copy_url span').text('Copying…')
+    $('#share_status').text('')
+    let copied = false
+    try {
+        if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(url)
+            copied = true
+        }
+    } catch (error) {
+        // Some browsers deny clipboard permission; offer a selectable link below.
+    }
+    if (!copied) {
+        fallback.hidden = false
+        input.focus()
+        input.select()
+        try {
+            copied = document.execCommand('copy')
+        } catch (error) {
+            copied = false
+        }
+    }
+    button.disabled = false
+    if (copied) {
+        fallback.hidden = true
+        button.focus({ preventScroll: true })
+        $('#copy_url span').text('Copied!')
+        $('#share_status').text('Link copied — ready to share your current design.')
+        copyStatusTimer = setTimeout(() => {
+            $('#copy_url span').text('Copy Shareable URL')
+            $('#share_status').text('')
+        }, 3000)
+    } else {
+        $('#copy_url span').text('Copy Shareable URL')
+        $('#share_status').text('Automatic copy is unavailable. Copy the selected link below with Ctrl+C or ⌘C.')
+    }
+})
+
+$('#select_share_url').on('click', function() {
+    const input = document.getElementById('share_url')
+    input.focus()
+    input.select()
 })
 
 $('#btn_import_export').on('click', function() {
@@ -406,7 +455,10 @@ function updateNoteEditors() {
     const subnet = this.dataset.subnet
     const value = this.value
     $('#calcbody input.block-note, #hierarchy_notes_tree input').each(function() {
-        if (this.dataset.subnet === subnet) this.value = value
+        if (this.dataset.subnet === subnet) {
+            this.value = value
+            this.title = value
+        }
     })
 }
 
@@ -415,7 +467,7 @@ function subnetBlockEditor(cidr, verb, note) {
         verb + ' ' + cidr + '" title="' + verb + ' ' + cidr + '">' +
         '<span>/' + cidr.split('/')[1] + '</span></button>' +
         '<input type="text" class="block-note" data-subnet="' + cidr +
-        '" aria-label="' + cidr + ' ' + verb + ' Note" placeholder="Note" value="' + escapeHtml(note) + '"></div>'
+        '" aria-label="' + cidr + ' ' + verb + ' Note" placeholder="Note" title="' + escapeHtml(note) + '" value="' + escapeHtml(note) + '"></div>'
 }
 
 $('#hierarchy_notes_tree').on('click', '.hierarchy-toggle', function() {
@@ -478,7 +530,119 @@ function renderTable(operatingMode) {
     $('#calcbody').empty();
     let maxDepth = get_dict_max_depth(subnetMap, 0)
     addRowTree(subnetMap, 0, maxDepth, operatingMode)
+    renderTableColumns(maxDepth)
 }
+
+function renderTableColumns(maxDepth) {
+    const table = document.getElementById('calc')
+    table.querySelectorAll('.column-resizer').forEach(handle => handle.remove())
+    tableColumns = [
+        { key: 'subnetHeader', label: 'Subnet Address', width: 200, min: 200 },
+        { key: 'rangeHeader', label: 'Range of Addresses', width: 280, min: 160 },
+        { key: 'useableHeader', label: 'Usable IPs', width: 280, min: 160 },
+        { key: 'hostsHeader', label: 'Hosts', width: 120, min: 120 }
+    ]
+    for (let depth = maxDepth - 1; depth >= 0; depth--) {
+        const prefix = Number(maxNetSize) + depth
+        tableColumns.push({ key: 'prefix-' + prefix, label: '/' + prefix + ' Note', width: 160, min: 120 })
+    }
+    const spareWidth = Math.max(0, table.parentElement.clientWidth - 1 - tableColumns.reduce((sum, column) => sum + column.width, 0))
+    if (!tableColumnWidths.size) {
+        tableColumns[1].width += spareWidth / 2
+        tableColumns[2].width += spareWidth / 2
+    }
+    const group = document.getElementById('calc_columns')
+    group.replaceChildren()
+    for (const column of tableColumns) {
+        const savedWidth = tableColumnWidths.get(column.key)
+        if (savedWidth) column.width = Math.max(column.min, savedWidth * table.parentElement.clientWidth / tableWidthReference)
+        column.element = document.createElement('col')
+        group.appendChild(column.element)
+    }
+    document.getElementById('treeHeader').colSpan = maxDepth
+    tableColumns.slice(0, infoColumnCount).forEach(column => {
+        addColumnResizer(document.getElementById(column.key), column)
+    })
+    table.querySelectorAll('td.split, td.join').forEach(cell => {
+        const key = 'prefix-' + cell.dataset.subnet.split('/')[1]
+        addColumnResizer(cell, tableColumns.find(column => column.key === key))
+    })
+    applyTableColumnWidths()
+}
+
+function applyTableColumnWidths() {
+    for (const column of tableColumns) {
+        column.element.style.width = column.width + 'px'
+        document.querySelectorAll('#calc .column-resizer[data-column="' + column.key + '"]').forEach(handle => {
+            handle.setAttribute('aria-valuenow', Math.round(column.width))
+        })
+    }
+    document.getElementById('calc').style.width = (1 + tableColumns.reduce((sum, column) => sum + column.width, 0)) + 'px'
+    document.querySelectorAll('#calc input.block-note').forEach(input => {
+        if (input !== document.activeElement) input.scrollLeft = 0
+    })
+}
+
+function resizeTableColumn(column, width) {
+    column.width = Math.max(column.min, width)
+    // Freeze all current widths so resizing one column never shrinks its neighbors.
+    tableColumns.forEach(item => tableColumnWidths.set(item.key, item.width))
+    tableWidthReference = document.getElementById('calc').parentElement.clientWidth
+    applyTableColumnWidths()
+}
+
+function addColumnResizer(cell, column) {
+    const handle = document.createElement('span')
+    handle.className = 'column-resizer'
+    handle.dataset.column = column.key
+    handle.tabIndex = 0
+    handle.setAttribute('role', 'separator')
+    handle.setAttribute('aria-orientation', 'vertical')
+    handle.setAttribute('aria-label', 'Resize ' + column.label)
+    handle.setAttribute('aria-valuemin', column.min)
+    handle.title = 'Drag to resize; use Left/Right arrow keys when focused'
+    handle.addEventListener('pointerdown', event => {
+        if (event.button !== 0) return
+        event.preventDefault()
+        const startX = event.clientX
+        const startWidth = column.width
+        handle.setPointerCapture(event.pointerId)
+        document.body.classList.add('resizing-columns')
+        const move = event => resizeTableColumn(column, startWidth + event.clientX - startX)
+        const finish = () => {
+            document.body.classList.remove('resizing-columns')
+            handle.removeEventListener('pointermove', move)
+            handle.removeEventListener('pointerup', finish)
+            handle.removeEventListener('pointercancel', finish)
+            handle.removeEventListener('lostpointercapture', finish)
+        }
+        handle.addEventListener('pointermove', move)
+        handle.addEventListener('pointerup', finish)
+        handle.addEventListener('pointercancel', finish)
+        handle.addEventListener('lostpointercapture', finish)
+    })
+    handle.addEventListener('keydown', event => {
+        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+        event.preventDefault()
+        resizeTableColumn(column, column.width + (event.key === 'ArrowRight' ? 1 : -1) * (event.shiftKey ? 50 : 10))
+    })
+    cell.appendChild(handle)
+}
+
+$('#btn_reset_columns').on('click', function() {
+    tableColumnWidths.clear()
+    renderTableColumns(get_dict_max_depth(subnetMap, 0))
+})
+
+// Browser zoom changes the available CSS width. Observe the container rather
+// than freezing pixel widths after a drag; minimum widths keep cells readable.
+let observedTableWidth = 0
+new ResizeObserver(entries => {
+    const width = entries[0].contentRect.width
+    if (Math.abs(width - observedTableWidth) < 1) return
+    observedTableWidth = width
+    if (tableColumns.length) renderTableColumns(get_dict_max_depth(subnetMap, 0))
+}).observe(document.getElementById('calc').parentElement)
 
 function addRowTree(subnetTree, depth, maxDepth, operatingMode) {
     for (let mapKey in subnetTree) {
@@ -497,7 +661,7 @@ function addRowTree(subnetTree, depth, maxDepth, operatingMode) {
             } else if (maxDepth > 20) {
                 notesWidth = '10%';
             }
-            addRow(subnet_split[0], parseInt(subnet_split[1]), (infoColumnCount + maxDepth - depth), (subnetTree[mapKey]['_note'] || ''), notesWidth, (subnetTree[mapKey]['_color'] || ''),operatingMode)
+            addRow(subnet_split[0], parseInt(subnet_split[1]), (maxDepth - depth), (subnetTree[mapKey]['_note'] || ''), notesWidth, (subnetTree[mapKey]['_color'] || ''),operatingMode)
         }
     }
 }
@@ -879,8 +1043,8 @@ function switchMode(operatingMode) {
     if (subnetMap !== null) {
         if (validateSubnetSizes(subnetMap, minSubnetSizes[operatingMode])) {
 
-            renderTable(operatingMode);
             set_usable_ips_title(operatingMode);
+            renderTable(operatingMode);
 
             $('#netsize').attr('pattern', netsizePatterns[operatingMode]);
             $('#input_form').removeClass('was-validated');
@@ -1093,7 +1257,8 @@ function getConfigUrl() {
     }
     renameKey(defaultExport, 'subnets', 's')
     //console.log(JSON.stringify(defaultExport))
-    return '/index.html?c=' + urlVersion + LZString.compressToEncodedURIComponent(JSON.stringify(defaultExport))
+    const pageUrl = new URL('index.html', window.location.href)
+    return pageUrl.pathname + '?c=' + urlVersion + LZString.compressToEncodedURIComponent(JSON.stringify(defaultExport))
 }
 
 function processConfigUrl() {
