@@ -1,0 +1,30 @@
+name: Deploy to Cloudflare Workers
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+      - name: Build
+        run: |
+          cd src
+          npm ci
+          npm run build --if-present
+      - name: Replace Deployment URL
+        run: |
+          sed -i "s|__DEPLOY_URL__|https://subnetcal.ckss.site|g" dist/index.html
+      - name: Deploy
+        run: npx wrangler@4 deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
