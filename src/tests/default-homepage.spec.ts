@@ -11,7 +11,7 @@ test('Default Homepage Rendering', async ({ page }) => {
   await expect(page.getByLabel('10.0.0.0/16', { exact: true }).getByLabel('Range of Addresses')).toContainText('10.0.0.0 - 10.0.255.255');
   await expect(page.getByLabel('10.0.0.0/16', { exact: true }).getByLabel('Usable IPs')).toContainText('10.0.0.1 - 10.0.255.254');
   await expect(page.getByLabel('10.0.0.0/16', { exact: true }).getByLabel('Hosts')).toContainText('65534');
-  await expect(page.getByRole('textbox', { name: '10.0.0.0/16 Note' })).toBeEmpty();
+  await expect(page.getByRole('textbox', { name: '10.0.0.0/16 Split Note', exact: true })).toBeEmpty();
   await expect(page.getByLabel('10.0.0.0/16', { exact: true }).getByLabel('Split', { exact: true })).toContainText('/16');
   // This "default no color" check could maybe be improved. May not be reliable cross-browser.
   await expect(page.getByRole('row', { name: '10.0.0.0/16' })).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');

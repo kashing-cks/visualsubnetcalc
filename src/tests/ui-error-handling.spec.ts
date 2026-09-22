@@ -43,8 +43,8 @@ test('Network Boundary Correction', async ({ page }) => {
   await expect(page.getByLabel('Network Address')).toHaveValue('123.45.64.0');
   await page.getByLabel('Network Size').click();
   await expect(page.getByRole('cell', { name: '123.45.64.0/20 Subnet Address' })).toContainText('123.45.64.0/20');
-  await page.getByRole('cell', { name: '/20 Split' }).click();
-  await page.getByLabel('/20 Join').click();
+  await page.getByRole('button', { name: 'Split 123.45.64.0/20' }).click();
+  await page.getByRole('button', { name: 'Join 123.45.64.0/20' }).click();
   await expect(page.getByLabel('123.45.64.0/20', { exact: true }).getByLabel('Split', { exact: true })).toContainText('/20');
 });
 
