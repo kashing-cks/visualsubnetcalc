@@ -1706,8 +1706,22 @@ function importConfig(text) {
         reset()
         return
     }
-    operatingMode = text['operating_mode'] || 'Standard'
-    switchMode(operatingMode);
+    // switchMode() refuses a mode that the loaded subnets are too small for, and leaves the
+    // UI on the previous mode. Put the global back and re-render the imported design there,
+    // otherwise the table would show the old design while subnetMap holds the new one, and
+    // later splits would apply a mode the user cannot see.
+    const requestedMode = text['operating_mode'] || 'Standard'
+    const previousMode = operatingMode
+    operatingMode = requestedMode
+    if (!switchMode(requestedMode)) {
+        operatingMode = previousMode
+        if (!switchMode(previousMode)) {
+            // The previous mode cannot take this design either. Standard accepts any valid
+            // subnet tree, so it always produces a table.
+            operatingMode = 'Standard'
+            switchMode('Standard')
+        }
+    }
 
 }
 
