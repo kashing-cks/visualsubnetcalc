@@ -763,7 +763,66 @@ function escapeHtml(value) {
     })[char])
 }
 
+// getSubnetNode(), get_matching_network_list() and count_network_children() each walk the
+// whole tree to answer, and a render asks all three once per rendered cell, so drawing a
+// design with n subnets costs O(n^2). Answer them from maps built in a single pass instead.
+//
+// The index holds live references to the nodes, so editing a note or a colour through it is
+// fine — only the shape of the tree matters. A tree that is replaced wholesale is caught by
+// the reference check in getSubnetIndex(); an in-place split or join, which keeps the same
+// reference and swaps the nodes, is invalidated explicitly.
+let subnetIndex = null
+let subnetIndexTree = null
+
+function invalidateSubnetIndex() {
+    subnetIndex = null
+}
+
+function getSubnetIndex() {
+    // Reassigning subnetMap replaces the node objects themselves — sortIPCIDRs() deep-copies
+    // the tree, and so do changeBaseNetwork() and the import path — so the reference is what
+    // identifies the tree the index was built from, and a reassignment rebuilds on its own.
+    // An in-place split or join keeps the reference, and those invalidate explicitly.
+    if (subnetIndex && subnetIndexTree === subnetMap) return subnetIndex
+
+    const byCidr = new Map()
+    const byAddress = new Map()
+    const leavesUnder = new Map()
+    const branches = new Set()
+
+    // Post-order, matching what the recursive get_matching_network_list() returned: the
+    // matches found inside a node come before the node itself, so descendants come first.
+    function walk(tree) {
+        let total = 0
+        for (const key of Object.keys(tree)) {
+            if (key.startsWith('_')) continue
+            const node = tree[key]
+            byCidr.set(key, node)
+            let own
+            if (has_network_sub_keys(node)) {
+                branches.add(key)
+                own = walk(node)
+            } else {
+                own = 1
+            }
+            leavesUnder.set(key, own)
+            total += own
+            const address = key.split('/')[0]
+            const matches = byAddress.get(address)
+            if (matches) matches.push(key)
+            else byAddress.set(address, [key])
+        }
+        return total
+    }
+    walk(subnetMap)
+
+    subnetIndex = { byCidr, byAddress, leavesUnder, branches }
+    subnetIndexTree = subnetMap
+    return subnetIndex
+}
+
 function getSubnetNode(cidr, tree = subnetMap) {
+    if (tree === subnetMap) return getSubnetIndex().byCidr.get(cidr)
     for (const key of Object.keys(tree)) {
         if (key.startsWith('_')) continue
         if (key === cidr) return tree[key]
@@ -807,6 +866,8 @@ function renderHierarchyNotes() {
 
 function renderTable(operatingMode) {
     closeQuickColors()
+    // The tree may have changed since the last draw; the index is rebuilt on first use.
+    invalidateSubnetIndex()
     // TODO: Validation Code
     $('#calcbody').empty();
     let maxDepth = get_dict_max_depth(subnetMap, 0)
@@ -1172,9 +1233,15 @@ function has_network_sub_keys(dict) {
     return false
 }
 
-function count_network_children(network, subnetTree, ancestryList) {
-    // TODO: This might be able to be optimized. Ultimately it needs to count the number of keys underneath
-    // the current key are unsplit networks (IE rows in the table, IE keys with a value of {}).
+function count_network_children(network, subnetTree = subnetMap, ancestryList = []) {
+    // Counts the unsplit networks underneath a key. The index already has the leaf count for
+    // every key, and the recursive version never counted a node as its own descendant, so a
+    // key that is itself a leaf contributes nothing.
+    if (subnetTree === subnetMap) {
+        const index = getSubnetIndex()
+        const leaves = index.leavesUnder.get(network) || 0
+        return index.branches.has(network) ? leaves : Math.max(leaves - 1, 0)
+    }
     let childCount = 0
     for (let mapKey in subnetTree) {
         if (mapKey.startsWith('_')) { continue; }
@@ -1204,7 +1271,10 @@ function get_network_children(network, subnetTree) {
     return subnetList
 }
 
-function get_matching_network_list(network, subnetTree) {
+function get_matching_network_list(network, subnetTree = subnetMap) {
+    // Callers only read the result, and the index holds it in the same order the recursion
+    // below produces, so hand out the indexed list directly.
+    if (subnetTree === subnetMap) return getSubnetIndex().byAddress.get(network) || []
     let subnetList = []
     for (let mapKey in subnetTree) {
         if (mapKey.startsWith('_')) { continue; }
@@ -1261,6 +1331,10 @@ function split_network(networkInput, netSize) {
 }
 
 function mutate_subnet_map(verb, network, subnetTree, propValue = '') {
+    // A split or a join changes the shape of the tree, which is what the index caches. Notes
+    // and colours change a node in place, and the index holds the node itself, so they do not
+    // need to invalidate anything.
+    if (verb === 'split' || verb === 'join') invalidateSubnetIndex()
     if (subnetTree === '') { subnetTree = subnetMap }
     for (let mapKey in subnetTree) {
         if (mapKey.startsWith('_')) { continue; }
