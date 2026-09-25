@@ -104,6 +104,9 @@ export default defineConfig({
   webServer: {
     command: 'npm run build && npm run local-secure-start',
     port: 8443,
-    reuseExistingServer: !process.env.CI,
+    /* Always start our own server: reusing whatever happens to be on the port means a stale or
+     * dying server can serve a whole run, and its death arrives as a wall of connection failures
+     * that look like test failures. If the port is taken, say so instead. */
+    reuseExistingServer: false,
   },
 });
