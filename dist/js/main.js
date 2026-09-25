@@ -2323,6 +2323,22 @@ function show_warning_modal(message) {
 
 $( document ).ready(function() {
 
+    // Bootstrap ignores a hide() that arrives while a modal is still fading in, and the warning then
+    // keeps its .show class for good: its Close button stops working. Measured in a browser, a click
+    // made while the warning was still appearing left it on screen 16 times out of 16. Catch that
+    // click before Bootstrap's own handler sees it, and close the warning once it has appeared.
+    const notifyWarning = document.getElementById('notifyModal')
+    let notifyWarningAppeared = false
+    notifyWarning.addEventListener('shown.bs.modal', function () { notifyWarningAppeared = true })
+    notifyWarning.addEventListener('hide.bs.modal', function () { notifyWarningAppeared = false })
+    notifyWarning.addEventListener('click', function (event) {
+        if (notifyWarningAppeared || !event.target.closest('[data-bs-dismiss="modal"]')) return
+        event.stopPropagation()
+        notifyWarning.addEventListener('shown.bs.modal', function () {
+            bootstrap.Modal.getOrCreateInstance(notifyWarning).hide()
+        }, { once: true })
+    }, true)
+
     // Initialize the jQuery Validation on the form
     var validator = $('#input_form').validate({
         onfocusout: function (element) {

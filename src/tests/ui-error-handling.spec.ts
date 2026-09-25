@@ -88,3 +88,17 @@ test('Subnet Too Small for OCI Mode', async ({ page }) => {
   await expect(page.locator('#notifyModalDescription')).toContainText('Please correct the errors in the form!');
   await expect(page.getByText('OCI Mode - Smallest size is /30')).toBeVisible();
 });
+
+test('The boundary warning can be dismissed while it is still appearing', async ({ page }) => {
+  // Bootstrap drops a hide() that arrives while a modal is still fading in: the element keeps its
+  // .show class and the warning can never be dismissed again. Clicking Close as soon as it appears
+  // left it on screen for good (measured 16 of 16 in a browser). The click is forced so that it
+  // lands the way a user's does — right away, not after Playwright decides the button has settled.
+  await page.goto('/');
+  await page.getByLabel('Network Address').fill('123.45.67.89');
+  await page.getByLabel('Network Size').fill('20');
+  await page.getByRole('button', { name: 'Go' }).click();
+  await expect(page.locator('#notifyModal')).toHaveClass(/show/);
+  await page.locator('#notifyModal .btn-close').click({ force: true });
+  await expect(page.locator('#notifyModal')).not.toBeVisible();
+});
