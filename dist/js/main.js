@@ -748,6 +748,33 @@ function unionRanges(ranges) {
     return merged
 }
 
+// Entries that cover addresses another entry also covers, grouped into runs. An entry that is
+// fully inside another is an overlap too. Two entries that merely touch — one ending where the
+// next begins — are not: that is a clean handover, not a conflict.
+function findOverlaps(entries) {
+    const groups = []
+    let group = []
+    let highest = -1
+    for (const entry of [...entries].sort((a, b) => a.start - b.start || a.end - b.end)) {
+        if (!group.length || entry.start > highest) {
+            if (group.length > 1) groups.push(group)
+            group = [entry]
+        } else {
+            group.push(entry)
+        }
+        highest = Math.max(highest, entry.end)
+    }
+    if (group.length > 1) groups.push(group)
+    return groups
+}
+
+// "lines 2 and 5" / "lines 2, 5 and 9"
+function describeLines(group) {
+    const lines = group.map((entry) => entry.line)
+    if (lines.length === 2) return `lines ${lines[0]} and ${lines[1]}`
+    return `lines ${lines.slice(0, -1).join(', ')} and ${lines[lines.length - 1]}`
+}
+
 function aggregateIpRanges(text) {
     const parsed = []
     const errors = []
@@ -755,12 +782,13 @@ function aggregateIpRanges(text) {
         const entry = parseIpRange(line)
         if (entry === null) return
         if (entry.error) errors.push({ line: index + 1, message: entry.error })
-        else parsed.push(entry)
+        else parsed.push({ ...entry, line: index + 1 })
     })
     const ranges = unionRanges(parsed)
     return {
         ranges,
         errors,
+        overlaps: findOverlaps(parsed),
         blocks: ranges.flatMap((range) => rangeToBlocks(range.start, range.end)),
         addresses: ranges.reduce((total, range) => total + (range.end - range.start + 1), 0),
     }
@@ -782,6 +810,31 @@ function renderAggregatedRanges() {
             )
     } else {
         $('#aggregateErrors').addClass('d-none').empty()
+    }
+
+    if (result.overlaps.length) {
+        // Not an error: the blocks are still right. But a list that overlaps itself is usually
+        // a sign that two sources were pasted together, or that a range was widened twice.
+        $('#aggregateOverlaps')
+            .removeClass('d-none')
+            .html(
+                '<div>Some entries cover addresses that another entry already covers. Each address is ' +
+                    'still counted once below, but a list that overlaps itself is usually a mistake:</div>' +
+                    '<ul class="mb-0">' +
+                    result.overlaps
+                        .map(
+                            (group) =>
+                                '<li>' +
+                                escapeHtml(describeLines(group)) +
+                                ': ' +
+                                group.map((entry) => escapeHtml(entry.text)).join(' / ') +
+                                '</li>'
+                        )
+                        .join('') +
+                    '</ul>'
+            )
+    } else {
+        $('#aggregateOverlaps').addClass('d-none').empty()
     }
 
     if (!result.blocks.length) {
