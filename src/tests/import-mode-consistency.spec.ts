@@ -98,3 +98,18 @@ test('A mode that the subnets do satisfy is applied normally', async ({
     page.getByLabel('10.0.0.0/28', { exact: true }).getByLabel('Usable IPs')
   ).toContainText('10.0.0.4 - 10.0.0.14');
 });
+
+test('A warning raised while a modal is closing can still be dismissed', async ({ page }) => {
+  // The Import button is data-bs-dismiss="modal": one click starts Bootstrap closing the
+  // import/export modal and runs the handler that raises the mode warning. Two modal transitions
+  // crossing each other left the warning on screen with a Close button that did nothing, so the
+  // user could not get rid of it. This repeats the sequence, because the transitions only have to
+  // overlap, not coincide — a single attempt can pass on the unfixed page.
+  for (let attempt = 0; attempt < 10; attempt++) {
+    await page.goto('/');
+    await importConfig(page, AWS_WITH_TINY_SUBNETS);
+    await expect(page.locator('#notifyModal')).toBeVisible();
+    await page.locator('#notifyModal .btn-close').click();
+    await expect(page.locator('#notifyModal')).not.toBeVisible();
+  }
+});
