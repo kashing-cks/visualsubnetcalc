@@ -55,3 +55,15 @@ I then for efficienty I could use this format:
 So lets say you're wanting to represent the 0th /24 in a /20 you would represent it as `00`, always knowing the last
 digit is the network size. Or the 0th /32 would be `07` (32 in base32 is 7). or the 5th /28 would be `54`.
 
+---
+
+**The implementation does not match the paragraph above.** What was built is:
+
+`[Nth Network as Integer][Network Size as Base36]`
+
+The mask is `Number(mask).toString(36)`, so `/32` is `w` rather than `07`, and a /24 is `o`, making the 0th /24 in a
+/20 `0o` rather than `00`. Base32 and base36 agree below 32, which is why the discrepancy was easy to miss — it only
+shows up at `/32`. See [docs/config-format.md](docs/config-format.md) for the format as it actually is, including
+how subnet keys nest and what is refused on import.
+
+
