@@ -54,6 +54,30 @@ test('Crafted row colour cannot inject an event handler attribute', async ({
   ).toContainText('10.0.0.0/24');
 });
 
+test('A rejected config still renders a usable table', async ({ page }) => {
+  await page.goto('/');
+  await gotoWithConfig(page, {
+    v: '1',
+    s: { '10.0.0.0<img src=x onerror="window.__injected=4">/24': {} },
+  });
+  // The page must not be stranded on the "Loading..." placeholder row.
+  await expect(page.locator('#calcbody')).not.toContainText('Loading');
+  await expect(
+    page.getByLabel('10.0.0.0/16', { exact: true }).getByLabel('Subnet Address')
+  ).toContainText('10.0.0.0/16');
+  await expect(page.getByLabel('Network Address')).toHaveValue('10.0.0.0');
+  await expect(page.getByLabel('Network Size')).toHaveValue('16');
+  // The rejected key must not leak into the boundary-correction modal either.
+  await expect(page.locator('.modal.show .modal-body')).toContainText(
+    'invalid subnet entries'
+  );
+  expect(await page.evaluate(() => window.__injected)).toBeUndefined();
+  // And the design is still editable once the warning is dismissed.
+  await page.locator('#notifyModal .btn-close').click();
+  await page.locator('#calcbody td.split .subnet-action').first().click();
+  await expect(page.locator('#calcbody tr')).toHaveCount(2);
+});
+
 test('A valid share link still renders after validation', async ({ page }) => {
   await page.goto('/');
   await gotoWithConfig(page, {

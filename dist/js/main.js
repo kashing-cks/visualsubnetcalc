@@ -659,7 +659,7 @@ function reset() {
     let rootNetwork = get_network($('#network').val(), $('#netsize').val())
     let rootCidr = rootNetwork + '/' + $('#netsize').val()
     if (cidrInput !== rootCidr) {
-        show_warning_modal('<div>Your network input is not on a network boundary for this network size. It has been automatically changed:</div><div class="font-monospace pt-2">' + $('#network').val() + ' -> ' + rootNetwork + '</div>')
+        show_warning_modal('<div>Your network input is not on a network boundary for this network size. It has been automatically changed:</div><div class="font-monospace pt-2">' + escapeHtml($('#network').val()) + ' -> ' + escapeHtml(rootNetwork) + '</div>')
         $('#network').val(rootNetwork)
         cidrInput = $('#network').val() + '/' + $('#netsize').val()
     }
@@ -1678,7 +1678,14 @@ function importConfig(text) {
     maxNetSize = subnetSize
     subnetMap = sortIPCIDRs(text['subnets']);
     if (!validSubnetTree(subnetMap)) {
+        // Refuse the config, but still render a usable table: leaving the markup
+        // untouched would strand the page on the "Loading..." placeholder row.
+        // The attacker-controlled keys are dropped before reset() reads the form.
+        subnetMap = {}
+        $('#network').val('10.0.0.0')
+        $('#netsize').val('16')
         show_warning_modal('<div>This configuration contains invalid subnet entries and was not imported.</div>')
+        reset()
         return
     }
     operatingMode = text['operating_mode'] || 'Standard'
