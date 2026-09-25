@@ -793,6 +793,75 @@ function renderAggregatedRanges() {
 
 $('#aggregateInput').on('input', renderAggregatedRanges)
 
+// Cells are read in reading order and anything that reads as an address, a block or a range is
+// collected, so the file does not have to be laid out in any particular way: a column of
+// subnets, a column of host addresses, or a whole sheet of notes all work. Entries already
+// covered by another entry cost nothing, because the aggregation takes the union.
+function addressesInWorkbook(workbook) {
+    const found = []
+    const seen = new Set()
+    for (const name of workbook.SheetNames) {
+        const sheet = workbook.Sheets[name]
+        if (!sheet) continue
+        for (const row of XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: '' })) {
+            for (const cell of row) {
+                const text = String(cell).trim()
+                if (!text || seen.has(text)) continue
+                const parsed = parseIpRange(text)
+                if (!parsed || parsed.error) continue
+                seen.add(text)
+                found.push(text)
+            }
+        }
+    }
+    return found
+}
+
+// A workbook is a zip (.xlsx and friends) or an OLE2 container (legacy .xls). Nothing else is.
+function looksLikeWorkbook(bytes) {
+    return (
+        (bytes[0] === 0x50 && bytes[1] === 0x4b) ||
+        (bytes[0] === 0xd0 && bytes[1] === 0xcf && bytes[2] === 0x11 && bytes[3] === 0xe0)
+    )
+}
+
+$('#aggregateFile').on('change', async function() {
+    const status = $('#aggregateFileStatus')
+    const file = this.files && this.files[0]
+    // Clearing the input is what makes choosing the same file twice fire again.
+    this.value = ''
+    if (!file) return
+    if (typeof XLSX === 'undefined') {
+        status.text('The spreadsheet reader could not be loaded, so ' + file.name + ' was not read.')
+        return
+    }
+    try {
+        // A CSV is text and a workbook is binary; XLSX.read works out the rest from the bytes.
+        const isText = /\.(csv|txt)$/i.test(file.name)
+        const data = isText ? await file.text() : new Uint8Array(await file.arrayBuffer())
+        // XLSX.read() does not reject bytes that are not a workbook — it falls back to reading
+        // them as text and returns an empty sheet — so a corrupt file would otherwise be
+        // reported as "nothing found in it", which sends the reader looking in the wrong place.
+        if (!isText && !looksLikeWorkbook(data)) {
+            status.text(file.name + ' is not a workbook. Save it as .xlsx, or as .csv if it is text.')
+            return
+        }
+        const workbook = XLSX.read(data, { type: isText ? 'string' : 'array' })
+        const found = addressesInWorkbook(workbook)
+        if (!found.length) {
+            status.text('No addresses, blocks or ranges were found in ' + file.name + '.')
+            return
+        }
+        $('#aggregateInput').val(found.join('\n')).trigger('input')
+        status.text(
+            'Read ' + found.length + (found.length === 1 ? ' entry' : ' entries') +
+            ' from ' + file.name + '.'
+        )
+    } catch (error) {
+        status.text(file.name + ' could not be read: ' + error.message)
+    }
+})
+
 $('#aggregateCopy').on('click', async function() {
     const text = $('#aggregateOutput').val()
     if (!text) return
