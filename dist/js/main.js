@@ -1555,16 +1555,25 @@ function processConfigUrl() {
     const params = new Proxy(new URLSearchParams(window.location.search), {
         get: (searchParams, prop) => searchParams.get(prop),
     });
-    if (params['c'] !== null) {
+    if (params['c'] === null) return false
+    // A share link is untrusted input: it can be truncated by a chat client, have its
+    // fragment mangled, or simply be mistyped. Never let a bad one break the page.
+    try {
         // First character is the version of the URL string, in case the mechanism of encoding changes
         let urlVersion = params['c'].substring(0, 1)
         let urlData = params['c'].substring(1)
-        let urlConfig = JSON.parse(LZString.decompressFromEncodedURIComponent(params['c'].substring(1)))
+        let urlConfig = JSON.parse(LZString.decompressFromEncodedURIComponent(urlData))
+        if (!urlConfig || typeof urlConfig !== 'object' || Array.isArray(urlConfig)) {
+            throw new Error('Share link did not contain a configuration object')
+        }
         renameKey(urlConfig, 'v', 'config_version')
         if (urlConfig.hasOwnProperty('m')) {
             renameKey(urlConfig, 'm', 'operating_mode')
         }
         renameKey(urlConfig, 's', 'subnets')
+        if (!urlConfig.hasOwnProperty('subnets') || typeof urlConfig['subnets'] !== 'object' || urlConfig['subnets'] === null) {
+            throw new Error('Share link did not contain a subnet map')
+        }
         if (urlConfig['config_version'] === '1') {
             // Version 1 Configs used full subnet strings as keys and just shortned the _note->_n and _color->_c keys
             expandKeys(urlConfig['subnets'])
@@ -1574,12 +1583,21 @@ function processConfigUrl() {
             if (urlConfig.hasOwnProperty('b')) {
                 renameKey(urlConfig, 'b', 'base_network')
             }
+            if (typeof urlConfig['base_network'] !== 'string') {
+                throw new Error('Share link is missing its base network')
+            }
             let expandedSubnetMap = {};
             expandSubnetMap(expandedSubnetMap, urlConfig['subnets'], urlConfig['base_network'])
             urlConfig['subnets'] = expandedSubnetMap
+        } else {
+            throw new Error('Unsupported share link version')
         }
         importConfig(urlConfig)
         return true
+    } catch (error) {
+        // The caller falls back to reset(), which renders the default design.
+        show_warning_modal('<div>This share link could not be read, so the default design has been loaded instead.</div><div class="pt-2">The link may be incomplete or corrupted. Ask the sender to copy it again.</div>')
+        return false
     }
 }
 
