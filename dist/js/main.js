@@ -417,10 +417,29 @@ $('#dropdown_oci').click(function() {
 });
 
 $('#importBtn').on('click', function() {
-    // A loaded design starts its own history: an undo here would otherwise jump back to a
-    // design from before the import.
-    clearUndoDesign()
-    importConfig(JSON.parse($('#importExportArea').val()))
+    const text = $('#importExportArea').val().trim()
+    if (!text) {
+        show_warning_modal('<div>This configuration was not imported.</div><div class="pt-2">There is nothing in the box to import.</div>')
+        return
+    }
+    let parsed
+    try {
+        parsed = JSON.parse(text)
+    } catch (error) {
+        // Pasting something that is not JSON is an easy slip. This used to throw out of the
+        // handler, and because the button is data-bs-dismiss the modal closed on the way out, so
+        // the page looked like it had taken the paste. Say what happened instead, the same way a
+        // configuration that fails validation does.
+        show_warning_modal('<div>This configuration was not imported.</div>' +
+            '<div class="pt-2">The box does not hold JSON: ' + escapeHtml(error.message) + '</div>')
+        return
+    }
+    // A loaded design starts its own history: an undo after a successful import would otherwise
+    // jump back to a design from before it. A rejected import changes nothing, so it keeps the
+    // history it had.
+    if (importConfig(parsed)) {
+        clearUndoDesign()
+    }
 })
 
 $('#dropdown_huawei').on('click', function(event) {
