@@ -135,6 +135,9 @@ test('Aggregating does not touch the design', async ({ page }) => {
   await openAggregator(page);
   await aggregate(page, '10.0.0.5 - 10.0.0.20');
   await page.locator('#aggregateModal .btn-close').click();
+  // A modal that is still fading out leaves a backdrop over the table, and the backdrop swallows
+  // the next click for as long as it is there.
+  await expect(page.locator('.modal.show')).toHaveCount(0);
   // The default design is still the only design.
   await expect(page.locator('#calcbody tr')).toHaveCount(1);
   await expect(page.locator('#calcbody tr').first()).toHaveAttribute(

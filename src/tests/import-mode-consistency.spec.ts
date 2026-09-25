@@ -45,6 +45,9 @@ test('The imported design is rendered even when its mode is rejected', async ({
 }) => {
   await importConfig(page, AWS_WITH_TINY_SUBNETS);
   await page.locator('#notifyModal .btn-close').click();
+  // A modal that is still fading out leaves a backdrop over the table, and the backdrop swallows
+  // the next click for as long as it is there.
+  await expect(page.locator('.modal.show')).toHaveCount(0);
   // The table must show the imported design, not the design that was there before.
   const rows = page.locator('#calcbody tr');
   await expect(rows).toHaveCount(2);
@@ -61,6 +64,9 @@ test('Splitting after a rejected mode uses the visible mode', async ({
 }) => {
   await importConfig(page, AWS_WITH_TINY_SUBNETS);
   await page.locator('#notifyModal .btn-close').click();
+  // A modal that is still fading out leaves a backdrop over the table, and the backdrop swallows
+  // the next click for as long as it is there.
+  await expect(page.locator('.modal.show')).toHaveCount(0);
   // Standard allows down to /32, so splitting a /30 must succeed.
   await page.locator('#calcbody td.split .subnet-action').first().click();
   const rows = page.locator('#calcbody tr');

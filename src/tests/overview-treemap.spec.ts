@@ -175,6 +175,9 @@ test('The overview shows the design it is opened on', async ({ page }) => {
   await openOverview(page);
   await expect(page.locator('#overview_hint')).toContainText('1 block');
   await page.locator('#overviewModal .btn-close').click();
+  // A modal that is still fading out leaves a backdrop over the table, and the backdrop swallows
+  // the next click for as long as it is there.
+  await expect(page.locator('.modal.show')).toHaveCount(0);
   await splitOnce(page);
   await splitOnce(page);
   await openOverview(page);

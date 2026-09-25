@@ -17,6 +17,12 @@ export default defineConfig({
   fullyParallel: true,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
   forbidOnly: !!process.env.CI,
+  /* A two-core machine can take longer than the 30s default over one interaction-heavy test
+   * (the full end-to-end test runs 20s here, and one test has hit 30.051s), and a test that is
+   * merely slow should not read as a regression. A *hung* interaction is a different thing and
+   * should say so quickly, by name, which is what actionTimeout below is for. */
+  timeout: 60_000,
+  expect: { timeout: 10_000 },
   /* Retry on CI only */
   retries: process.env.CI ? 2 : 0,
   /* Opt out of parallel tests on CI. */
@@ -28,8 +34,12 @@ export default defineConfig({
     /* Base URL to use in actions like `await page.goto('/')`. */
     baseURL: 'https://localhost:8443',
     ignoreHTTPSErrors: true,
-    /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
-    trace: 'on-first-retry',
+    /* Bounds the wait for one element, so an interaction that can never happen fails naming the
+     * locator that was waited for, instead of silently eating the whole test budget. */
+    actionTimeout: 10_000,
+    /* Keep the trace of a failure locally as well: with retries off there is no retry to collect
+     * one, and the trace is what shows what was actually on the page at the time. */
+    trace: process.env.CI ? 'on-first-retry' : 'retain-on-failure',
   },
 
   /* Configure projects for major browsers */

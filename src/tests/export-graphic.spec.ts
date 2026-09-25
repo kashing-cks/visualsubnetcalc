@@ -88,6 +88,9 @@ test('What is exported is the design on screen at the time', async ({ page }) =>
   expect((one.match(/<rect /g) || []).length).toBe(1);
 
   await page.locator('#overviewModal .btn-close').click();
+  // A modal that is still fading out leaves a backdrop over the table, and the backdrop swallows
+  // the next click for as long as it is there.
+  await expect(page.locator('.modal.show')).toHaveCount(0);
   await splitOnce(page);
   await splitOnce(page);
   await openOverview(page);
@@ -113,6 +116,9 @@ test('The page says what it downloaded, and forgets it next time', async ({ page
   await expect(page.locator('#overviewExportStatus')).toContainText('1920×1080');
 
   await page.locator('#overviewModal .btn-close').click();
+  // A modal that is still fading out leaves a backdrop over the table, and the backdrop swallows
+  // the next click for as long as it is there.
+  await expect(page.locator('.modal.show')).toHaveCount(0);
   await openOverview(page);
   await expect(page.locator('#overviewExportStatus')).toHaveText('');
 });

@@ -74,6 +74,9 @@ test('A rejected config still renders a usable table', async ({ page }) => {
   expect(await page.evaluate(() => window.__injected)).toBeUndefined();
   // And the design is still editable once the warning is dismissed.
   await page.locator('#notifyModal .btn-close').click();
+  // A modal that is still fading out leaves a backdrop over the table, and the backdrop swallows
+  // the next click for as long as it is there.
+  await expect(page.locator('.modal.show')).toHaveCount(0);
   await page.locator('#calcbody td.split .subnet-action').first().click();
   await expect(page.locator('#calcbody tr')).toHaveCount(2);
 });
