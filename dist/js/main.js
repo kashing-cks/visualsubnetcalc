@@ -753,8 +753,13 @@ $('#hierarchy_notes_tree').on('click', '.hierarchy-toggle', function() {
 })
 
 function validCidrKey(key) {
-    return typeof key === 'string' && /^(\d{1,3}\.){3}\d{1,3}\/(3[0-2]|[12]?\d)$/.test(key) &&
-        key.split('/')[0].split('.').every(octet => Number(octet) <= 255)
+    if (typeof key !== 'string' || !/^(\d{1,3}\.){3}\d{1,3}\/(3[0-2]|[12]?\d)$/.test(key)) return false
+    const [address, mask] = key.split('/')
+    if (!address.split('.').every(octet => Number(octet) <= 255)) return false
+    // The address has to be the first address of its block. 10.0.0.128/18 is not a /18 network
+    // at all, and two keys like it share a single Nth representation in a share link, so the
+    // second one silently disappears. Splitting always produces aligned blocks.
+    return ip2int(address) % 2 ** (32 - Number(mask)) === 0
 }
 
 function escapeHtml(value) {
@@ -1137,23 +1142,32 @@ function getNthSubnet(baseNetwork, specificSubnet) {
 /**
  * Reconstructs a subnet from its Nth position representation within a base network.
  *
+ * The representation is "[Nth as a decimal integer][mask in base36]", for example "0o" is the
+ * 0th /24 (base36 'o' is 24) and "7k" is the 7th /20 within a /16.
+ *
  * @param {string} baseNetwork - The larger network containing the subnet (e.g., "10.0.0.0/16")
  * @param {string} nthString - The compact representation of the subnet (e.g., "7k")
- * @returns {string} The full subnet representation (e.g., "10.0.112.0/20")
+ * @returns {string|null} The full subnet representation (e.g., "10.0.112.0/20"), or null when
+ *   nthString is not a subnet of baseNetwork.
  */
-// Takes 10.0.0.0/16 and '7k' and returns 10.0.96.0/20
-// '10.0.96.0/20' being the 7th /20 (base36 'k' is 20 int) within the /16.
+// Takes 10.0.0.0/16 and '7k' and returns 10.0.112.0/20 — the 7th /20 in the /16.
 function getSubnetFromNth(baseNetwork, nthString) {
     const [baseIp, baseMask] = baseNetwork.split('/');
     const baseInt = ip2int(baseIp);
 
+    // Decoding anything else still produces a plausible-looking CIDR, so a key that is not in
+    // this form has to be refused rather than turned into a subnet outside the base network.
+    if (typeof nthString !== 'string' || !/^\d+[0-9a-z]$/.test(nthString)) return null
+
     const size = fromBase36(nthString.slice(-1));
+    if (size < parseInt(baseMask, 10) || size > 32) return null
+
     const nth = parseInt(nthString.slice(0, -1), 10);
+    // The nth subnet of that size must fall inside the base network. Multiplying rather than
+    // shifting keeps large nth values from wrapping the 32-bit result.
+    if (nth >= 2 ** (size - parseInt(baseMask, 10))) return null
 
-    const innerSizeInt = 32 - size;
-    const subnetInt = baseInt + (nth << innerSizeInt);
-
-    return `${int2ip(subnetInt)}/${size}`;
+    return `${int2ip(baseInt + nth * 2 ** (32 - size))}/${size}`;
 }
 
 function subnet_last_address(subnet, netSize) {
@@ -1671,7 +1685,9 @@ function processConfigUrl() {
         } else {
             throw new Error('Unsupported share link version')
         }
-        importConfig(urlConfig)
+        // importConfig() refuses a configuration it cannot use and explains why, so do not
+        // replace that explanation with the generic message below.
+        if (!importConfig(urlConfig)) return false
         return true
     } catch (error) {
         // The caller falls back to reset(), which renders the default design.
@@ -1704,7 +1720,12 @@ function expandSubnetMap(expandedMap, miniMap, baseNetwork) {
         if (mapKey === 'n' || mapKey === 'c' || mapKey === 'p') {
             continue;
         }
-        let subnetKey = getSubnetFromNth(baseNetwork, mapKey)
+        // A version 2 key is normally "[Nth][mask in base36]", but a full CIDR is unambiguous —
+        // an nth string never contains a dot or a slash — and it is what people write by hand.
+        let subnetKey = validCidrKey(mapKey) ? mapKey : getSubnetFromNth(baseNetwork, mapKey)
+        if (subnetKey === null) {
+            throw new Error('Subnet key ' + JSON.stringify(mapKey) + ' is not a subnet of ' + baseNetwork)
+        }
         expandedMap[subnetKey] = {}
         if (has_network_sub_keys(miniMap[mapKey])) {
             expandSubnetMap(expandedMap[subnetKey], miniMap[mapKey], baseNetwork)
@@ -1740,14 +1761,57 @@ function expandKeys(subnetTree) {
 }
 
 function renameKey(obj, oldKey, newKey) {
-    if (oldKey !== newKey) {
-    Object.defineProperty(obj, newKey,
-        Object.getOwnPropertyDescriptor(obj, oldKey));
-        delete obj[oldKey];
+    if (oldKey === newKey) return
+    const descriptor = Object.getOwnPropertyDescriptor(obj, oldKey)
+    // A payload may already use the long name, or leave the field out entirely, and then there
+    // is no short key to move. Leave it alone so a well-formed configuration written with the
+    // long names loads instead of throwing; the callers validate what they actually need.
+    if (!descriptor) return
+    Object.defineProperty(obj, newKey, descriptor)
+    delete obj[oldKey]
+}
+
+const validOperatingModes = ['Standard', 'AZURE', 'AWS', 'OCI', 'HUAWEI']
+
+// Describes what is wrong with a configuration, or returns null when it is usable.
+//
+// A configuration is untrusted input whether it arrives as a share link or pasted into the
+// import box, and importConfig() writes straight into globals and the form. Checking the shape
+// in one place means a bad one is refused as a whole, with a reason, instead of throwing from
+// somewhere inside the render or quietly leaving the form blank.
+function validateConfig(text) {
+    if (!text || typeof text !== 'object' || Array.isArray(text)) {
+        return 'A configuration has to be a JSON object.'
     }
+    const version = text['config_version']
+    if (version !== '1' && version !== '2') {
+        return 'The configuration version must be "1" or "2"' +
+            (version === undefined ? '.' : ', not "' + version + '".')
+    }
+    if (version === '2' && !validCidrKey(text['base_network'])) {
+        return 'A version 2 configuration needs a base_network such as "10.0.0.0/16".'
+    }
+    const subnets = text['subnets']
+    if (!subnets || typeof subnets !== 'object' || Array.isArray(subnets) || !Object.keys(subnets).length) {
+        return 'The configuration does not contain any subnets.'
+    }
+    if (!validSubnetTree(subnets)) {
+        return 'The configuration contains invalid subnet entries.'
+    }
+    if (text.hasOwnProperty('operating_mode') && !validOperatingModes.includes(text['operating_mode'])) {
+        return 'The configuration asks for an unknown operating mode. Valid values are ' +
+            validOperatingModes.join(', ') + '.'
+    }
+    return null
 }
 
 function importConfig(text) {
+    const problem = validateConfig(text)
+    if (problem) {
+        // Refuse without touching the current design: the caller decides what to show instead.
+        show_warning_modal('<div>This configuration was not imported.</div><div class="pt-2">' + escapeHtml(problem) + '</div>')
+        return false
+    }
     inactiveColorMeanings = new Map()
     colorLegend = new Map()
     document.getElementById('color_legend_rows').replaceChildren()
@@ -1774,17 +1838,6 @@ function importConfig(text) {
     $('#netsize').val(subnetSize)
     maxNetSize = subnetSize
     subnetMap = sortIPCIDRs(text['subnets']);
-    if (!validSubnetTree(subnetMap)) {
-        // Refuse the config, but still render a usable table: leaving the markup
-        // untouched would strand the page on the "Loading..." placeholder row.
-        // The attacker-controlled keys are dropped before reset() reads the form.
-        subnetMap = {}
-        $('#network').val('10.0.0.0')
-        $('#netsize').val('16')
-        show_warning_modal('<div>This configuration contains invalid subnet entries and was not imported.</div>')
-        reset()
-        return
-    }
     // switchMode() refuses a mode that the loaded subnets are too small for, and leaves the
     // UI on the previous mode. Put the global back and re-render the imported design there,
     // otherwise the table would show the old design while subnetMap holds the new one, and
@@ -1801,10 +1854,13 @@ function importConfig(text) {
             switchMode('Standard')
         }
     }
-
+    return true
 }
 
 function validSubnetTree(tree) {
+    // A node has to be an object: sortIPCIDRs() calls Object.keys() on every value, so a null
+    // or an array or a string would throw well after the point where it could be explained.
+    if (!tree || typeof tree !== 'object' || Array.isArray(tree)) return false
     for (const key in tree) {
         if (key.startsWith('_')) continue
         if (!validCidrKey(key)) return false

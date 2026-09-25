@@ -127,6 +127,7 @@ Notes on Huawei Cloud mode:
 - **Import / Export** shows the design as JSON. Copy it out to save, or paste a previous export and
   press Import to restore it.
 - Nothing is uploaded or stored — all state lives in the browser and in the link you keep.
+- The link and JSON formats are documented in [docs/config-format.md](docs/config-format.md).
 
 ## Project Layout
 
@@ -135,6 +136,8 @@ dist/                 Static website (this is what gets published)
   index.html          Markup, modals and the colour palette
   css/main.css        Layout, colours and column resizing
   js/main.js          Subnet maths, rendering, notes, Excel export
+docs/
+  config-format.md    The share-link and JSON configuration format
 src/
   scss/               Bootstrap customisation compiled into dist/css
   tests/              Playwright end-to-end tests
