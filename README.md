@@ -18,6 +18,8 @@ Huawei Cloud mode, per-level notes, an Excel export and a simplified control lay
   are handed out largest first, sized by the usable addresses each mode actually leaves, and
   the space left over is kept as free.
 - **Notes at every level** — every subnet in the hierarchy can carry its own note.
+- **Overview** — the whole design drawn to scale, each block's area its share of the address
+  space, coloured as the table colours it.
 - **Huawei Cloud mode** — usable addresses are reduced by the addresses Huawei Cloud reserves.
 - **Five operating modes** — Standard, AWS, Azure, OCI and Huawei Cloud (see the table below).
 - **Import / Export** — copy the whole design as JSON and paste it back later.

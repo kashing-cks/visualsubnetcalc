@@ -1055,6 +1055,129 @@ $('#vlsmBuild').on('click', function () {
     $('#vlsmModal').modal('hide')
 })
 
+// ---------------------------------------------------------------------------
+// Overview: the whole design, drawn to scale
+// ---------------------------------------------------------------------------
+
+// A treemap of a binary partition draws itself: every split is two equal halves, so halving
+// the longer side keeps the pieces as square as they can be. What comes out is a picture
+// where a block's area is its share of the address space — the shape of the partitioning,
+// which a table of rows cannot show.
+const OVERVIEW_WIDTH = 960
+const OVERVIEW_HEIGHT = 540
+// Below this area a block is not drawn: an area-faithful picture cannot show a thousandth of
+// a percent, and a rectangle too small to see still costs a node. Those blocks are counted and
+// reported instead, and the subtree under them is not walked.
+const OVERVIEW_MIN_AREA = 24
+// A ceiling for designs split far deeper than anyone builds by hand, so that opening the view
+// cannot be made to build a hundred thousand rectangles.
+const OVERVIEW_MAX_RECTS = 2000
+
+// The number of blocks a pruned subtree holds, so the report says how many were left out
+// rather than how many subtrees were skipped.
+function countLeafBlocks(node) {
+    const children = Object.keys(node).filter((key) => !key.startsWith('_'))
+    if (!children.length) return 1
+    return children.reduce((sum, key) => sum + countLeafBlocks(node[key]), 0)
+}
+
+// The colour the block's own cell has in the table: its own override when it has one,
+// otherwise the split default. A leaf's join cells belong to the ancestors above it, and an
+// ancestor has no single place in a picture where every block is drawn exactly once.
+function overviewFill(node) {
+    const override = node._cellColors && node._cellColors['block']
+    if (validColor(override)) return override
+    return blockColors['split']
+}
+
+// Works on any tree, so the layout can be reasoned about — and exported — without disturbing
+// the design on screen.
+function treemapRects(tree, baseNetwork) {
+    const rects = []
+    let skipped = 0
+    const source = tree || subnetMap
+    const base = baseNetwork || currentBaseNetwork()
+    const root = source[base]
+    if (!root) return { rects: rects, skipped: skipped, baseNetwork: base }
+
+    function walk(node, cidr, box, depth) {
+        if (box.width * box.height < OVERVIEW_MIN_AREA || rects.length >= OVERVIEW_MAX_RECTS) {
+            skipped += countLeafBlocks(node)
+            return
+        }
+        // Left to right in address order, so the picture is laid out the way the table reads.
+        const children = Object.keys(node)
+            .filter((key) => !key.startsWith('_'))
+            .sort((a, b) => ip2int(a.split('/')[0]) - ip2int(b.split('/')[0]))
+        if (!children.length) {
+            rects.push({ cidr: cidr, note: node._note || '', node: node, box: box, depth: depth })
+            return
+        }
+        if (box.width >= box.height) {
+            const half = box.width / 2
+            walk(node[children[0]], children[0], { x: box.x, y: box.y, width: half, height: box.height }, depth + 1)
+            walk(node[children[1]], children[1], { x: box.x + half, y: box.y, width: box.width - half, height: box.height }, depth + 1)
+        } else {
+            const half = box.height / 2
+            walk(node[children[0]], children[0], { x: box.x, y: box.y, width: box.width, height: half }, depth + 1)
+            walk(node[children[1]], children[1], { x: box.x, y: box.y + half, width: box.width, height: box.height - half }, depth + 1)
+        }
+    }
+
+    walk(root, base, { x: 0, y: 0, width: OVERVIEW_WIDTH, height: OVERVIEW_HEIGHT }, 0)
+    return { rects: rects, skipped: skipped, baseNetwork: base }
+}
+
+function overviewSvg(rects) {
+    const parts = [
+        '<svg id="overview_svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + OVERVIEW_WIDTH + ' ' +
+            OVERVIEW_HEIGHT + '" preserveAspectRatio="xMidYMid meet" role="img" style="width:100%;height:auto;max-height:68vh;display:block" aria-label="The design drawn to scale">',
+    ]
+    for (const rect of rects) {
+        const box = rect.box
+        const fill = overviewFill(rect.node)
+        const mask = rect.cidr.split('/')[1]
+        const usable = 1 + subnet_usable_last(ip2int(rect.cidr.split('/')[0]), Number(mask), operatingMode) -
+            subnet_usable_first(ip2int(rect.cidr.split('/')[0]), Number(mask), operatingMode)
+        const label = rect.cidr + (rect.note ? ' — ' + rect.note : '')
+        parts.push(
+            '<g><rect x="' + box.x + '" y="' + box.y + '" width="' + box.width + '" height="' + box.height +
+                '" fill="' + escapeHtml(fill) + '" stroke="#ffffff" stroke-width="1">' +
+                '<title>' + escapeHtml(label + ' · ' + usable + ' usable') + '</title></rect>'
+        )
+        // A label only where it can be read; a clipped one is worse than none.
+        if (box.width >= 74 && box.height >= 16) {
+            const colour = textColor(fill)
+            const centre = box.x + box.width / 2
+            const lines = [rect.cidr]
+            if (rect.note && box.height >= 32 && box.width >= 96) lines.push(rect.note)
+            const startY = box.y + box.height / 2 - (lines.length - 1) * 6
+            lines.forEach(function (line, index) {
+                parts.push(
+                    '<text x="' + centre + '" y="' + (startY + index * 13) + '" fill="' + colour +
+                        '" font-family="monospace" font-size="11" text-anchor="middle" dominant-baseline="middle">' +
+                        escapeHtml(line) + '</text>'
+                )
+            })
+        }
+        parts.push('</g>')
+    }
+    parts.push('</svg>')
+    return parts.join('')
+}
+
+$('#overviewModal').on('show.bs.modal', function () {
+    const layout = treemapRects()
+    $('#overview_canvas').html(overviewSvg(layout.rects))
+    const blocks = layout.rects.length
+    let hint = blocks + (blocks === 1 ? ' block' : ' blocks') + ' in ' + layout.baseNetwork +
+        ', drawn to scale — each block\'s area is its share of the address space.'
+    if (layout.skipped) {
+        hint += ' ' + layout.skipped + ' too small to draw at this size, left out rather than drawn as a hairline.'
+    }
+    $('#overview_hint').text(hint)
+})
+
 // Cells are read in reading order and anything that reads as an address, a block or a range is
 // collected, so the file does not have to be laid out in any particular way: a column of
 // subnets, a column of host addresses, or a whole sheet of notes all work. Entries already
