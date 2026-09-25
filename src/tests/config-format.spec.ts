@@ -224,3 +224,32 @@ test('The app can read the share link it writes', async ({ page }) => {
     page.getByRole('textbox', { name: '10.0.0.0/19 Split Note', exact: true })
   ).toHaveValue('a');
 });
+
+test('A pasted version 2 configuration may use the Nth key form too', async ({ page }) => {
+  // docs/config-format.md says a key is either a CIDR or an Nth string, and expandSubnetMap()
+  // decodes both before the design is applied. A share link may carry the Nth form; a paste
+  // has to accept it the same way. "1q" is nth 1 at mask 26 (q is 26 in base36) inside
+  // 10.0.0.0/16, which is the block 10.0.0.64/26.
+  await importJson(page, { config_version: '2', base_network: '10.0.0.0/16', subnets: { '1q': {} } });
+  await expect(rowLabels(page)).resolves.toEqual(['10.0.0.64/26']);
+});
+
+test('A pasted version 2 configuration with an undecodable key is still refused', async ({ page }) => {
+  // Accepting the Nth form must not turn the key check into a rubber stamp: "zzzz" asks for a
+  // mask of 35, which is not a subnet of anything.
+  await importJson(page, { config_version: '2', base_network: '10.0.0.0/16', subnets: { 'zzzz': {} } });
+  await expect(page.locator('#notifyModalDescription')).toContainText('invalid subnet entries');
+  await expectDefaultDesign(page);
+});
+
+test('A pasted Nth key keeps the note and colour that travel with it', async ({ page }) => {
+  // Renaming an Nth key to its CIDR must move the key and nothing else: a note or a colour on
+  // that node has to arrive with it.
+  await importJson(page, {
+    config_version: '2',
+    base_network: '10.0.0.0/16',
+    subnets: { '1q': { _note: 'branch office', _color: '#ff0000' } },
+  });
+  await expect(rowLabels(page)).resolves.toEqual(['10.0.0.64/26']);
+  await expect(page.getByRole('textbox', { name: /10\.0\.0\.64\/26.*Note/ })).toHaveValue('branch office');
+});

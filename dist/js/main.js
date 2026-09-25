@@ -2546,7 +2546,7 @@ function validateConfig(text) {
     if (!subnets || typeof subnets !== 'object' || Array.isArray(subnets) || !Object.keys(subnets).length) {
         return 'The configuration does not contain any subnets.'
     }
-    if (!validSubnetTree(subnets)) {
+    if (!validSubnetTree(subnets, version === '2' ? text['base_network'] : null)) {
         return 'The configuration contains invalid subnet entries.'
     }
     if (text.hasOwnProperty('operating_mode') && !validOperatingModes.includes(text['operating_mode'])) {
@@ -2593,7 +2593,9 @@ function applyDesign(text) {
     $('#network').val(subnetNet)
     $('#netsize').val(subnetSize)
     maxNetSize = subnetSize
-    subnetMap = sortIPCIDRs(text['subnets']);
+    subnetMap = sortIPCIDRs(text['config_version'] === '1'
+        ? text['subnets']
+        : cidrKeyedTree(text['subnets'], text['base_network']));
     // switchMode() refuses a mode that the loaded subnets are too small for, and leaves the
     // UI on the previous mode. Put the global back and re-render the design there, otherwise
     // the table would show the old design while subnetMap holds the new one, and later splits
@@ -2612,14 +2614,43 @@ function applyDesign(text) {
     }
 }
 
-function validSubnetTree(tree) {
+// A pasted version 2 map may name a subnet with its Nth string instead of its CIDR. Rename those
+// keys, and only those keys, so the design is held in the single form the rest of the app renders:
+// notes, colors and per-cell colors stay exactly where they are. A CIDR-keyed tree comes back
+// unchanged, which is what the share link path and an undo restore hand over.
+function cidrKeyedTree(tree, baseNetwork) {
+    const keyed = {}
+    for (const key in tree) {
+        if (key.startsWith('_')) {
+            keyed[key] = tree[key]
+            continue
+        }
+        const cidr = validCidrKey(key) ? key : getSubnetFromNth(baseNetwork, key)
+        keyed[cidr] = cidrKeyedTree(tree[key], baseNetwork)
+    }
+    return keyed
+}
+
+function validSubnetKey(key, baseNetwork) {
+    if (validCidrKey(key)) return true
+    // A key may also be an Nth string: that form is what the format documents for version 2, and
+    // expandSubnetMap() decodes it. A key that decodes to nothing is still not a subnet.
+    if (!baseNetwork) return false
+    try {
+        return getSubnetFromNth(baseNetwork, key) !== null
+    } catch (error) {
+        return false
+    }
+}
+
+function validSubnetTree(tree, baseNetwork) {
     // A node has to be an object: sortIPCIDRs() calls Object.keys() on every value, so a null
     // or an array or a string would throw well after the point where it could be explained.
     if (!tree || typeof tree !== 'object' || Array.isArray(tree)) return false
     for (const key in tree) {
         if (key.startsWith('_')) continue
-        if (!validCidrKey(key)) return false
-        if (!validSubnetTree(tree[key])) return false
+        if (!validSubnetKey(key, baseNetwork)) return false
+        if (!validSubnetTree(tree[key], baseNetwork)) return false
     }
     return true
 }
