@@ -752,6 +752,11 @@ $('#hierarchy_notes_tree').on('click', '.hierarchy-toggle', function() {
     document.getElementById(this.getAttribute('aria-controls')).hidden = expanded
 })
 
+function validCidrKey(key) {
+    return typeof key === 'string' && /^(\d{1,3}\.){3}\d{1,3}\/(3[0-2]|[12]?\d)$/.test(key) &&
+        key.split('/')[0].split('.').every(octet => Number(octet) <= 255)
+}
+
 function escapeHtml(value) {
     return String(value).replace(/[&<>"']/g, char => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
@@ -950,7 +955,7 @@ function addRow(network, netSize, colspan, note, notesWidth, color, operatingMod
     let usableLast = subnet_usable_last(addressFirst, netSize, operatingMode)
     let hostCount = 1 + usableLast - usableFirst
     let styleTag = ''
-    if (color !== '') {
+    if (validColor(color)) {
         styleTag = ' style="background-color: ' + color + '"'
     }
 
@@ -962,15 +967,15 @@ function addRow(network, netSize, colspan, note, notesWidth, color, operatingMod
         rangeCol = int2ip(addressFirst);
         usableCol = int2ip(usableFirst);
     }
-    let rowId = 'row_' + network.replace('.', '-') + '_' + netSize
+    let rowId = 'row_' + network.replace(/\./g, '-') + '_' + netSize
     let rowCIDR = network + '/' + netSize
     let newRow =
-        '            <tr id="' + rowId + '"' + styleTag + '  aria-label="' + rowCIDR + '">\n' +
-        '                <td data-subnet="' + rowCIDR + '" aria-labelledby="' + rowId + ' subnetHeader" class="row_address">' + rowCIDR + '</td>\n' +
-        '                <td data-subnet="' + rowCIDR + '" aria-labelledby="' + rowId + ' rangeHeader" class="row_range">' + rangeCol + '</td>\n' +
-        '                <td data-subnet="' + rowCIDR + '" aria-labelledby="' + rowId + ' useableHeader" class="row_usable">' + usableCol + '</td>\n' +
-        '                <td data-subnet="' + rowCIDR + '" aria-labelledby="' + rowId + ' hostsHeader" class="row_hosts">' + hostCount + '</td>\n' +
-        '                <td data-subnet="' + rowCIDR + '" aria-labelledby="' + rowId + ' splitHeader" rowspan="1" colspan="' + colspan + '" class="split" data-mutate-verb="split">' + subnetBlockEditor(rowCIDR, 'Split', note) + '</td>\n'
+        '            <tr id="' + escapeHtml(rowId) + '"' + styleTag + '  aria-label="' + escapeHtml(rowCIDR) + '">\n' +
+        '                <td data-subnet="' + escapeHtml(rowCIDR) + '" aria-labelledby="' + escapeHtml(rowId) + ' subnetHeader" class="row_address">' + escapeHtml(rowCIDR) + '</td>\n' +
+        '                <td data-subnet="' + escapeHtml(rowCIDR) + '" aria-labelledby="' + escapeHtml(rowId) + ' rangeHeader" class="row_range">' + rangeCol + '</td>\n' +
+        '                <td data-subnet="' + escapeHtml(rowCIDR) + '" aria-labelledby="' + escapeHtml(rowId) + ' useableHeader" class="row_usable">' + usableCol + '</td>\n' +
+        '                <td data-subnet="' + escapeHtml(rowCIDR) + '" aria-labelledby="' + escapeHtml(rowId) + ' hostsHeader" class="row_hosts">' + hostCount + '</td>\n' +
+        '                <td data-subnet="' + escapeHtml(rowCIDR) + '" aria-labelledby="' + escapeHtml(rowId) + ' splitHeader" rowspan="1" colspan="' + colspan + '" class="split" data-mutate-verb="split">' + subnetBlockEditor(rowCIDR, 'Split', note) + '</td>\n'
     if (netSize > maxNetSize) {
         // This is wrong. Need to figure out a way to get the number of children so you can set rowspan and the number
         // of ancestors so you can set colspan.
@@ -981,7 +986,7 @@ function addRow(network, netSize, colspan, note, notesWidth, color, operatingMod
         for (const i in matchingNetworkList) {
             let matchingNetwork = matchingNetworkList[i]
             let networkChildrenCount = count_network_children(matchingNetwork, subnetMap, [])
-            newRow += '                <td aria-label="' + matchingNetwork + ' Join" rowspan="' + networkChildrenCount + '" colspan="1" class="join" data-subnet="' + matchingNetwork + '" data-mutate-verb="join">' + subnetBlockEditor(matchingNetwork, 'Join', getSubnetNode(matchingNetwork)._note || '') + '</td>\n'
+            newRow += '                <td aria-label="' + escapeHtml(matchingNetwork) + ' Join" rowspan="' + networkChildrenCount + '" colspan="1" class="join" data-subnet="' + escapeHtml(matchingNetwork) + '" data-mutate-verb="join">' + subnetBlockEditor(matchingNetwork, 'Join', getSubnetNode(matchingNetwork)._note || '') + '</td>\n'
         }
     }
     newRow += '            </tr>';
@@ -1672,9 +1677,22 @@ function importConfig(text) {
     $('#netsize').val(subnetSize)
     maxNetSize = subnetSize
     subnetMap = sortIPCIDRs(text['subnets']);
+    if (!validSubnetTree(subnetMap)) {
+        show_warning_modal('<div>This configuration contains invalid subnet entries and was not imported.</div>')
+        return
+    }
     operatingMode = text['operating_mode'] || 'Standard'
     switchMode(operatingMode);
 
+}
+
+function validSubnetTree(tree) {
+    for (const key in tree) {
+        if (key.startsWith('_')) continue
+        if (!validCidrKey(key)) return false
+        if (!validSubnetTree(tree[key])) return false
+    }
+    return true
 }
 
 function sortIPCIDRs(obj) {
