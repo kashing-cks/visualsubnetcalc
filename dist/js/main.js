@@ -1128,10 +1128,17 @@ function treemapRects(tree, baseNetwork) {
     return { rects: rects, skipped: skipped, baseNetwork: base }
 }
 
-function overviewSvg(rects) {
+function overviewSvg(rects, options) {
+    const scale = options && options.scale ? options.scale : 1
+    // On the page the drawing fills its column and is capped by the viewport. In a file there
+    // is no column and no viewport, so the size goes in the file instead — nothing outside the
+    // page knows about the page's stylesheet.
+    const sizing = options && options.standalone
+        ? ' width="' + OVERVIEW_WIDTH * scale + '" height="' + OVERVIEW_HEIGHT * scale + '"'
+        : ' style="width:100%;height:auto;max-height:68vh;display:block"'
     const parts = [
         '<svg id="overview_svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + OVERVIEW_WIDTH + ' ' +
-            OVERVIEW_HEIGHT + '" preserveAspectRatio="xMidYMid meet" role="img" style="width:100%;height:auto;max-height:68vh;display:block" aria-label="The design drawn to scale">',
+            OVERVIEW_HEIGHT + '"' + sizing + ' preserveAspectRatio="xMidYMid meet" role="img" aria-label="The design drawn to scale">',
     ]
     for (const rect of rects) {
         const box = rect.box
@@ -1176,6 +1183,62 @@ $('#overviewModal').on('show.bs.modal', function () {
         hint += ' ' + layout.skipped + ' too small to draw at this size, left out rather than drawn as a hairline.'
     }
     $('#overview_hint').text(hint)
+    // A message about the last download belongs to the design that was on screen then.
+    $('#overviewExportStatus').text('')
+})
+
+function overviewFileName() {
+    return 'subnets-' + currentBaseNetwork().replace(/[^0-9A-Za-z.]+/g, '-').replace(/-+$/, '')
+}
+
+function downloadBlob(blob, name) {
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = name
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    // Revoking straight away can beat the download in some browsers; a moment is enough.
+    setTimeout(function () { URL.revokeObjectURL(url) }, 1000)
+}
+
+$('#overviewSvg').on('click', function () {
+    const svg = overviewSvg(treemapRects().rects, { standalone: true })
+    const name = overviewFileName() + '.svg'
+    downloadBlob(new Blob([svg], { type: 'image/svg+xml' }), name)
+    $('#overviewExportStatus').text('Downloaded ' + name + ' — the drawing as it is, at its own size, so it can be scaled anywhere.')
+})
+
+$('#overviewPng').on('click', function () {
+    const scale = 2
+    const status = $('#overviewExportStatus')
+    const name = overviewFileName() + '.png'
+    const svg = overviewSvg(treemapRects().rects, { standalone: true, scale: scale })
+    const image = new Image()
+    image.onload = function () {
+        const canvas = document.createElement('canvas')
+        canvas.width = OVERVIEW_WIDTH * scale
+        canvas.height = OVERVIEW_HEIGHT * scale
+        const context = canvas.getContext('2d')
+        // The drawing has no background of its own: on the page it sits on the card, but a PNG
+        // gets opened on its own and transparent blocks on a dark viewer are unreadable.
+        context.fillStyle = '#ffffff'
+        context.fillRect(0, 0, canvas.width, canvas.height)
+        context.drawImage(image, 0, 0, canvas.width, canvas.height)
+        canvas.toBlob(function (blob) {
+            if (!blob) {
+                status.text('The drawing could not be turned into a PNG.')
+                return
+            }
+            downloadBlob(blob, name)
+            status.text('Downloaded ' + name + ' at ' + canvas.width + '×' + canvas.height + '.')
+        }, 'image/png')
+    }
+    image.onerror = function () {
+        status.text('The drawing could not be turned into a PNG.')
+    }
+    image.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg)
 })
 
 // Cells are read in reading order and anything that reads as an address, a block or a range is

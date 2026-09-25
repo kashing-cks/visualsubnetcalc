@@ -40,8 +40,19 @@ async function builtLeaves(page: Page) {
   });
 }
 
+// A silent exception in the page leaves the planner's button disabled with nothing to say why,
+// so any page error fails the test that saw it, by name, instead of surfacing as a timeout on
+// whichever interaction happened to be next.
+let pageErrors: string[] = [];
+
 test.beforeEach(async ({ page }) => {
+  pageErrors = [];
+  page.on('pageerror', (error: Error) => pageErrors.push(error.message));
   await page.goto('/');
+});
+
+test.afterEach(() => {
+  expect(pageErrors).toEqual([]);
 });
 
 test('The planner says what it wants instead of planning nothing', async ({ page }) => {
