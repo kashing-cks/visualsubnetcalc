@@ -847,7 +847,12 @@ function renderTableColumns(maxDepth) {
     })
     table.querySelectorAll('td.split, td.join').forEach(cell => {
         const key = 'prefix-' + cell.dataset.subnet.split('/')[1]
-        addColumnResizer(cell, tableColumns.find(column => column.key === key))
+        // renderTableColumns() derives one column per level from maxNetSize and maxDepth,
+        // but an imported config can nest unevenly — a /24 holding /28s skips /25 to /27 —
+        // so this prefix may have no column. Leave the cell without a resizer rather than
+        // throwing, which would abandon the render and skip updating the rest of the UI.
+        const column = tableColumns.find(column => column.key === key)
+        if (column) addColumnResizer(cell, column)
     })
     applyTableColumnWidths()
 }
