@@ -13,6 +13,7 @@ Huawei Cloud mode, per-level notes, an Excel export and a simplified control lay
 ## Features
 
 - **Visual split / join table** — one click halves a subnet or merges siblings back together.
+- **Undo** — step back through the last splits, joins and note edits, one change at a time.
 - **Notes at every level** — every subnet in the hierarchy can carry its own note.
 - **Huawei Cloud mode** — usable addresses are reduced by the addresses Huawei Cloud reserves.
 - **Five operating modes** — Standard, AWS, Azure, OCI and Huawei Cloud (see the table below).

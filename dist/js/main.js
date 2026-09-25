@@ -363,6 +363,9 @@ $('#btn_go').on('click', function() {
     $('#input_form').validate();
     if ($('#input_form').valid()) {
         $('#input_form')[0].classList.add('was-validated');
+        // A different base network is a different design, and the history belongs to the one
+        // that was on screen.
+        clearUndoDesign()
         reset();
         // Additional actions upon validation can be added here
     } else {
@@ -414,6 +417,9 @@ $('#dropdown_oci').click(function() {
 });
 
 $('#importBtn').on('click', function() {
+    // A loaded design starts its own history: an undo here would otherwise jump back to a
+    // design from before the import.
+    clearUndoDesign()
     importConfig(JSON.parse($('#importExportArea').val()))
 })
 
@@ -944,11 +950,69 @@ function isMatchingSize(subnet1, subnet2) {
     return subnet1.split('/')[1] === subnet2.split('/')[1];
 }
 
+// --- Undo for changes to the design -------------------------------------------------------
+//
+// Splits, joins and note edits all go through mutate_subnet_map(), so a snapshot taken there
+// covers all three with one mechanism, and restoring a snapshot goes back through applyDesign()
+// rather than through a second rendering path. Colours are not included: the palette has its
+// own undo, and undoing a split must not quietly roll back a colour changed since.
+
+const undoDesignStack = []
+const UNDO_DESIGN_LIMIT = 50
+let lastUndoDesignKey = ''
+
+function undoDesignLabel(verb, network) {
+    if (verb === 'split') return 'the split of ' + network
+    if (verb === 'join') return 'the join of ' + network
+    if (verb === 'note') return 'the note on ' + network
+    return verb + ' ' + network
+}
+
+function updateUndoDesignButton() {
+    const button = document.getElementById('btn_undo_design')
+    const step = undoDesignStack[undoDesignStack.length - 1]
+    button.disabled = !step
+    button.title = step ? 'Undo ' + step.label : 'Nothing to undo yet'
+}
+
+function clearUndoDesign() {
+    undoDesignStack.length = 0
+    lastUndoDesignKey = ''
+    updateUndoDesignButton()
+}
+
+function pushUndoDesign(verb, network) {
+    const key = verb + ':' + network
+    // A note is saved as it is typed, so one step per field rather than one per keystroke: the
+    // first keystroke records the state before the field was touched and the rest of that
+    // field's edits fold into it, until something else changes.
+    if (verb === 'note' && key === lastUndoDesignKey) return
+    lastUndoDesignKey = key
+    // The same deep copy of a design that the share link makes. exportConfig() hands back the
+    // live tree for subnets, so a snapshot taken without copying would follow later edits.
+    const snapshot = JSON.parse(JSON.stringify(exportConfig(false)))
+    delete snapshot['block_colors']
+    delete snapshot['color_legend']
+    undoDesignStack.push({ label: undoDesignLabel(verb, network), config: snapshot })
+    if (undoDesignStack.length > UNDO_DESIGN_LIMIT) undoDesignStack.shift()
+    updateUndoDesignButton()
+}
+
+$('#btn_undo_design').on('click', function() {
+    const step = undoDesignStack.pop()
+    if (!step) return
+    // The next edit is a new step even if it is the same field again.
+    lastUndoDesignKey = ''
+    applyDesign(step.config)
+    updateUndoDesignButton()
+})
+
 $('#calcbody').on('click', '.subnet-action', function(event) {
     colorUndo.length = 0
     $('#undo_color').prop('disabled', true)
     const cell = this.closest('td')
     // HTML DOM Data elements! Yay! See the `data-*` attributes of the HTML tags
+    pushUndoDesign(cell.dataset.mutateVerb, cell.dataset.subnet)
     mutate_subnet_map(cell.dataset.mutateVerb, cell.dataset.subnet, '')
     renderTable(operatingMode);
 })
@@ -962,6 +1026,7 @@ $('#hierarchyNotesModal').on('show.bs.modal', function() {
 $('#hierarchy_notes_tree').on('input', 'input', updateNoteEditors)
 
 function updateNoteEditors() {
+    pushUndoDesign('note', this.dataset.subnet)
     mutate_subnet_map('note', this.dataset.subnet, '', this.value)
     const subnet = this.dataset.subnet
     const value = this.value
@@ -2072,19 +2137,24 @@ function importConfig(text) {
     }
     colorUndo.length = 0
     $('#undo_color').prop('disabled', true)
-    if (text['config_version'] === '1') {
-        var [subnetNet, subnetSize] = Object.keys(text['subnets'])[0].split('/')
-    } else if (text['config_version'] === '2') {
-        var [subnetNet, subnetSize] = text['base_network'].split('/')
-    }
+    applyDesign(text)
+    return true
+}
+
+// Puts a design into the app: the form fields, the tree and the mode. Deliberately not the
+// colours — undo restores a design without owning the palette, which has its own undo.
+function applyDesign(text) {
+    const [subnetNet, subnetSize] = text['config_version'] === '1'
+        ? Object.keys(text['subnets'])[0].split('/')
+        : text['base_network'].split('/')
     $('#network').val(subnetNet)
     $('#netsize').val(subnetSize)
     maxNetSize = subnetSize
     subnetMap = sortIPCIDRs(text['subnets']);
     // switchMode() refuses a mode that the loaded subnets are too small for, and leaves the
-    // UI on the previous mode. Put the global back and re-render the imported design there,
-    // otherwise the table would show the old design while subnetMap holds the new one, and
-    // later splits would apply a mode the user cannot see.
+    // UI on the previous mode. Put the global back and re-render the design there, otherwise
+    // the table would show the old design while subnetMap holds the new one, and later splits
+    // would apply a mode the user cannot see.
     const requestedMode = text['operating_mode'] || 'Standard'
     const previousMode = operatingMode
     operatingMode = requestedMode
@@ -2097,7 +2167,6 @@ function importConfig(text) {
             switchMode('Standard')
         }
     }
-    return true
 }
 
 function validSubnetTree(tree) {
