@@ -18,6 +18,8 @@ Huawei Cloud mode, per-level notes, an Excel export and a simplified control lay
 - **Five operating modes** — Standard, AWS, Azure, OCI and Huawei Cloud (see the table below).
 - **Import / Export** — copy the whole design as JSON and paste it back later.
 - **Export to Excel** — download an `.xlsx` workbook that keeps colours, blocks and notes.
+- **Aggregate Ranges** — turn a list of addresses and ranges from anywhere else into the
+  smallest set of blocks that covers exactly those addresses.
 - **Shareable URL** — the complete design is encoded in the link, nothing is stored on a server.
 - **24 preset colours plus a custom colour picker.**
 - **Resizable columns** — drag a column edge (or use the arrow keys) to fit longer notes;

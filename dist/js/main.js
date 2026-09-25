@@ -645,6 +645,180 @@ $('#select_share_url').on('click', function() {
     input.select()
 })
 
+// --- Aggregating address ranges into the smallest set of blocks ---------------------------
+//
+// The design itself is a strict partition, so it cannot contain overlapping subnets. This is
+// for the other direction: taking a list of addresses and ranges from somewhere else (a
+// firewall, a spreadsheet, a ticket) and reducing it to the fewest blocks that cover exactly
+// the same addresses.
+
+const IPV4_PATTERN = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/
+
+// Stricter than ip2int(), which assumes it is given something valid. Returns null for
+// anything that is not an IPv4 address, so callers can report it rather than render NaN.
+function parseIpv4(text) {
+    const match = IPV4_PATTERN.exec(String(text).trim())
+    if (!match) return null
+    let value = 0
+    for (let octet = 1; octet <= 4; octet++) {
+        const part = Number(match[octet])
+        if (part > 255) return null
+        value = value * 256 + part
+    }
+    return value
+}
+
+// One line to {start, end, text}, {error: …}, or null for a line to skip. Accepts an address,
+// a block, or a range; the dash may have spaces around it and may be an en dash, because that
+// is what a document or a spreadsheet usually contains.
+function parseIpRange(line) {
+    const text = String(line).trim().replace(/[\u2013\u2014]/g, '-')
+    if (!text || text.startsWith('#') || text.startsWith('//')) return null
+
+    const ends = text.split(/\s*-\s*/)
+    if (ends.length === 2) {
+        const start = parseIpv4(ends[0])
+        const end = parseIpv4(ends[1])
+        if (start === null || end === null) {
+            return { error: `"${text}" is not a pair of IPv4 addresses.` }
+        }
+        if (start > end) return { error: `"${text}" ends before it starts.` }
+        return { start, end, text }
+    }
+    if (ends.length !== 1) return { error: `"${text}" is not a single range.` }
+
+    if (text.includes('/')) {
+        const parts = text.split('/')
+        if (parts.length !== 2 || !/^\d{1,2}$/.test(parts[1])) {
+            return { error: `"${text}" is not a block in address/mask form.` }
+        }
+        const address = parseIpv4(parts[0])
+        if (address === null) return { error: `"${text}" does not start with an IPv4 address.` }
+        const mask = Number(parts[1])
+        if (mask > 32) return { error: `"${text}" has a mask longer than /32.` }
+        const size = 2 ** (32 - mask)
+        // Host bits are dropped rather than refused: 10.0.0.5/24 is the 10.0.0.0/24 block.
+        const start = Math.floor(address / size) * size
+        return { start, end: start + size - 1, text }
+    }
+
+    const address = parseIpv4(text)
+    if (address === null) return { error: `"${text}" is not an IPv4 address.` }
+    return { start: address, end: address, text }
+}
+
+// The largest block that can start at `start`: limited by how many trailing zero bits the
+// address has, then by the end of the range. Arithmetic rather than bitwise, so addresses at
+// or above 2**31 do not go through a signed 32-bit conversion and come back wrong.
+function rangeToBlocks(start, end) {
+    const blocks = []
+    while (start <= end) {
+        let exponent = 32
+        for (let bit = 0; bit < 32; bit++) {
+            if (start % 2 ** (bit + 1) !== 0) {
+                exponent = bit
+                break
+            }
+        }
+        while (start + 2 ** exponent - 1 > end) exponent--
+        blocks.push(`${int2ip(start)}/${32 - exponent}`)
+        start += 2 ** exponent
+    }
+    return blocks
+}
+
+// Sorts and coalesces ranges that overlap or touch, so each maximal run of covered addresses
+// is decomposed once. Overlapping input is normal in a list copied from elsewhere.
+function unionRanges(ranges) {
+    const merged = []
+    for (const range of [...ranges].sort((a, b) => a.start - b.start || a.end - b.end)) {
+        const last = merged[merged.length - 1]
+        if (last && range.start <= last.end + 1) {
+            last.end = Math.max(last.end, range.end)
+        } else {
+            merged.push({ start: range.start, end: range.end })
+        }
+    }
+    return merged
+}
+
+function aggregateIpRanges(text) {
+    const parsed = []
+    const errors = []
+    String(text).split('\n').forEach((line, index) => {
+        const entry = parseIpRange(line)
+        if (entry === null) return
+        if (entry.error) errors.push({ line: index + 1, message: entry.error })
+        else parsed.push(entry)
+    })
+    const ranges = unionRanges(parsed)
+    return {
+        ranges,
+        errors,
+        blocks: ranges.flatMap((range) => rangeToBlocks(range.start, range.end)),
+        addresses: ranges.reduce((total, range) => total + (range.end - range.start + 1), 0),
+    }
+}
+
+function renderAggregatedRanges() {
+    const result = aggregateIpRanges($('#aggregateInput').val())
+    $('#aggregateOutput').val(result.blocks.join('\n'))
+
+    if (result.errors.length) {
+        $('#aggregateErrors')
+            .removeClass('d-none')
+            .html(
+                '<div>Not everything could be read:</div><ul class="mb-0">' +
+                    result.errors
+                        .map((error) => `<li>line ${error.line}: ${escapeHtml(error.message)}</li>`)
+                        .join('') +
+                    '</ul>'
+            )
+    } else {
+        $('#aggregateErrors').addClass('d-none').empty()
+    }
+
+    if (!result.blocks.length) {
+        $('#aggregateSummary').text('Nothing to aggregate yet.')
+        return
+    }
+    const entries = result.ranges.length
+    const addresses = result.addresses.toLocaleString('en-US')
+    $('#aggregateSummary').text(
+        `${entries} range${entries === 1 ? '' : 's'} covering ${addresses} address` +
+            `${result.addresses === 1 ? '' : 'es'} reduce to ${result.blocks.length} block` +
+            `${result.blocks.length === 1 ? '' : 's'}.`
+    )
+}
+
+$('#aggregateInput').on('input', renderAggregatedRanges)
+
+$('#aggregateCopy').on('click', async function() {
+    const text = $('#aggregateOutput').val()
+    if (!text) return
+    let copied = false
+    try {
+        if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(text)
+            copied = true
+        }
+    } catch (error) {
+        // Some browsers deny clipboard permission; fall back to selecting the text.
+    }
+    if (copied) {
+        const button = this
+        const label = button.textContent
+        button.textContent = 'Copied!'
+        setTimeout(() => {
+            button.textContent = label
+        }, 2000)
+        return
+    }
+    const output = document.getElementById('aggregateOutput')
+    output.focus()
+    output.select()
+})
+
 $('#btn_import_export').on('click', function() {
     $('#importExportArea').val(JSON.stringify(exportConfig(false), null, 2))
 })
