@@ -6,7 +6,7 @@
   },
   "scripts": {
     "postinstall": "npm install -g sass@1.104.1",
-    "build": "sass --style compressed scss/custom.scss:../dist/css/bootstrap.min.css && cp node_modules/lz-string/libs/lz-string.min.js ../dist/js/lz-string.min.js",
+    "build": "sass --style compressed scss/custom.scss:../dist/css/bootstrap.min.css && cp node_modules/lz-string/libs/lz-string.min.js ../dist/js/lz-string.min.js && cp node_modules/bootstrap/dist/js/bootstrap.bundle.min.js ../dist/js/bootstrap.bundle.min.js",
     "pretest": "npm run setup:certs",
     "test": "npx playwright test",
     "setup:certs": "sh scripts/setup-certs.sh certs",

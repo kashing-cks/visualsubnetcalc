@@ -34,9 +34,6 @@ jobs:
       working-directory: ./src
     - run: npm run build --if-present
       working-directory: ./src
-    - name: Replace Deployment URL
-      run: |
-        sed -i "s|__DEPLOY_URL__|${{ vars.DEPLOY_URL }}|g" dist/index.html
     - name: Install Playwright Browsers
       run: npx playwright install --with-deps
       working-directory: ./src
