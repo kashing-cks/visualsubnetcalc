@@ -7,8 +7,9 @@
   "scripts": {
     "postinstall": "npm install -g sass@1.104.1",
     "build": "sass --style compressed scss/custom.scss:../dist/css/bootstrap.min.css && cp node_modules/lz-string/libs/lz-string.min.js ../dist/js/lz-string.min.js",
+    "pretest": "npm run setup:certs",
     "test": "npx playwright test",
-    "setup:certs": "mkdir -p certs; mkcert -cert-file certs/cert.pem -key-file certs/cert.key localhost 127.0.0.1",
+    "setup:certs": "sh scripts/setup-certs.sh certs",
     "start": "node node_modules/http-server/bin/http-server ../dist -c-1",
     "local-secure-start": "node node_modules/http-server/bin/http-server ../dist -c-1 -C certs/cert.pem -K certs/cert.key -S -p 8443"
   },

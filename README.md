@@ -171,14 +171,18 @@ The site is served from `./dist/`, so you can also open `./dist/index.html` dire
 and the Playwright suite targets `https://localhost:8443`.
 
 ```shell
-# Install mkcert and trust the local CA
-brew install mkcert        # macOS; use your package manager elsewhere
-mkcert -install
-
 cd src
 npm run setup:certs        # writes certs/cert.pem and certs/cert.key
 npm run local-secure-start # https://localhost:8443
 ```
+
+`setup:certs` generates a self-signed certificate with `openssl`, which ships with Linux and macOS —
+no extra tooling to install. It keeps an existing unexpired certificate, so if you would rather have a
+locally trusted one, generate it with `mkcert` first and this will leave it alone. Use
+`npm run setup:certs -- --force` to replace it.
+
+Because the certificate is self-signed, your browser will warn about it. That only affects browsing
+by hand; the test suite sets `ignoreHTTPSErrors` and does not care.
 
 ### Tests
 
@@ -187,9 +191,9 @@ cd src
 npm test                   # runs the Playwright suite in chromium and firefox
 ```
 
-The test suite starts its own HTTPS server (certificates from `npm run setup:certs` are required) and
-covers the subnet maths, all operating modes, notes, colours, column resizing, URL sharing,
-JSON import/export and the Excel export.
+`npm test` provisions the certificates itself (via the `pretest` hook), so it works on a fresh clone
+with no setup step. The suite starts its own HTTPS server and covers the subnet maths, all operating
+modes, notes, colours, column resizing, URL sharing, JSON import/export and the Excel export.
 
 ## Docker
 
