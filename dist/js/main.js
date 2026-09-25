@@ -2304,9 +2304,21 @@ function set_usable_ips_title(operatingMode) {
 }
 
 function show_warning_modal(message) {
-    var notifyModal = new bootstrap.Modal(document.getElementById('notifyModal'), {});
+    const notifyModalElement = document.getElementById('notifyModal')
+    // getOrCreateInstance() rather than a new Modal each time: one element has one instance, so its
+    // open/shut state cannot be split across two of them.
+    const notifyModal = bootstrap.Modal.getOrCreateInstance(notifyModalElement)
     $('#notifyModal .modal-body').html(message)
-    notifyModal.show()
+    // A warning is usually raised by the same click that dismisses another modal — the Import button
+    // carries data-bs-dismiss="modal" — and two modal transitions crossing each other left the
+    // warning on screen with a Close button that did nothing, so it could not be dismissed at all.
+    // Let the closing modal finish before showing this one.
+    const closing = [...document.querySelectorAll('.modal.show')].find((element) => element !== notifyModalElement)
+    if (!closing) {
+        notifyModal.show()
+        return
+    }
+    closing.addEventListener('hidden.bs.modal', function () { notifyModal.show() }, { once: true })
 }
 
 $( document ).ready(function() {
