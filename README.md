@@ -19,7 +19,8 @@ Huawei Cloud mode, per-level notes, an Excel export and a simplified control lay
 - **Import / Export** — copy the whole design as JSON and paste it back later.
 - **Export to Excel** — download an `.xlsx` workbook that keeps colours, blocks and notes.
 - **Aggregate Ranges** — turn a list of addresses and ranges from anywhere else into the
-  smallest set of blocks that covers exactly those addresses.
+  smallest set of blocks that covers exactly those addresses. Paste them, or load a CSV or
+  Excel file and every cell in it is checked.
 - **Shareable URL** — the complete design is encoded in the link, nothing is stored on a server.
 - **24 preset colours plus a custom colour picker.**
 - **Resizable columns** — drag a column edge (or use the arrow keys) to fit longer notes;

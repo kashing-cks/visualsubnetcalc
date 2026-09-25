@@ -301,6 +301,11 @@
                         Host bits in a block are ignored, so <code>10.0.0.5/24</code> means
                         <code>10.0.0.0/24</code>. Lines starting with <code>#</code> are comments.
                     </p>
+                    <div class="input-group mb-2">
+                        <label class="input-group-text" for="aggregateFile">Load from a file</label>
+                        <input type="file" class="form-control" id="aggregateFile" accept=".csv,.txt,.xlsx,.xls" aria-describedby="aggregateFileStatus">
+                    </div>
+                    <div id="aggregateFileStatus" class="form-text mb-3" role="status">A CSV or Excel file: every cell is read in order and anything that is an address, a block or a range is collected.</div>
                     <div class="form-floating font-monospace">
                         <textarea class="form-control" id="aggregateInput" style="height: 190px" placeholder="10.0.0.5 - 10.0.0.20"></textarea>
                         <label for="aggregateInput">Addresses to aggregate</label>
