@@ -852,6 +852,209 @@ function renderAggregatedRanges() {
 
 $('#aggregateInput').on('input', renderAggregatedRanges)
 
+// ---------------------------------------------------------------------------
+// VLSM planning: a list of requirements in, a design out
+// ---------------------------------------------------------------------------
+
+// The smallest block whose *usable* addresses hold `hosts`, counted the way the table counts
+// them, so that a plan and the table it produces agree. The modes differ — AWS and Azure give
+// up five addresses per subnet, Huawei five, OCI three, Standard two — and each mode has a
+// floor it cannot go below (minSubnetSizes), so a small enough request has no answer at all.
+function smallestMaskForHosts(hosts, mode) {
+    // minSubnetSizes is the smallest block the mode allows — /28 on AWS and Huawei, /29 on
+    // Azure, /30 on OCI — so the search starts there rather than at /32: a /31 would hold two
+    // hosts, but no mode that reserves addresses will accept a block that small.
+    const floor = minSubnetSizes[mode] || 32
+    // Any address does: the reserved counts are offsets from the network address.
+    const probe = ip2int('10.0.0.0')
+    for (let mask = floor; mask >= 0; mask--) {
+        const usable = 1 + subnet_usable_last(probe, mask, mode) - subnet_usable_first(probe, mask, mode)
+        if (usable >= hosts) return mask
+    }
+    return null
+}
+
+// "name, 120" per line; the name is optional. A bare number is accepted and named, so that
+// nothing in the plan is anonymous.
+function parseVlsmRequirements(text) {
+    const requirements = []
+    const errors = []
+    const lines = String(text === undefined || text === null ? '' : text).split('\n')
+    lines.forEach(function (raw, index) {
+        const line = index + 1
+        const trimmed = raw.trim()
+        if (!trimmed) return
+        if (trimmed.indexOf('/') !== -1) {
+            errors.push({ line: line, message: 'that looks like a subnet; give a name and a host count instead' })
+            return
+        }
+        const match = trimmed.match(/^(.*?)[,\s]*(\d+)$/)
+        if (!match) {
+            errors.push({ line: line, message: 'expected a name and a host count, like "Sales, 120"' })
+            return
+        }
+        const hosts = Number(match[2])
+        if (hosts < 1) {
+            errors.push({ line: line, message: 'a host count has to be at least 1' })
+            return
+        }
+        const name = match[1].replace(/[,\s]+$/, '').trim() || ('Subnet ' + (requirements.length + 1))
+        requirements.push({ name: name, hosts: hosts })
+    })
+    return { requirements: requirements, errors: errors }
+}
+
+function planVlsm(baseNetwork, requirements, mode) {
+    const parts = String(baseNetwork).split('/')
+    const start = ip2int(parts[0])
+    const end = start + 2 ** (32 - Number(parts[1])) - 1
+    const allocations = []
+    const unplaced = []
+    let cursor = start
+    // Largest first. Every larger block is placed while the space is still empty, which is
+    // what lets a plain first fit pack them with nothing wasted but the alignment padding;
+    // placing a small block first can leave a gap that no later large block fits into, even
+    // though the space would have been enough taken together.
+    const ordered = requirements.slice().sort(function (a, b) { return b.hosts - a.hosts })
+    for (const request of ordered) {
+        const blockMask = smallestMaskForHosts(request.hosts, mode)
+        if (blockMask === null || blockMask < Number(parts[1])) {
+            unplaced.push({ name: request.name, hosts: request.hosts, why: 'needs a bigger block than ' + baseNetwork })
+            continue
+        }
+        const size = 2 ** (32 - blockMask)
+        const aligned = Math.ceil(cursor / size) * size
+        if (aligned + size - 1 > end) {
+            unplaced.push({ name: request.name, hosts: request.hosts, why: 'there is no room left in ' + baseNetwork })
+            continue
+        }
+        allocations.push({
+            name: request.name,
+            hosts: request.hosts,
+            cidr: int2ip(aligned) + '/' + blockMask,
+            usable: 1 + subnet_usable_last(aligned, blockMask, mode) - subnet_usable_first(aligned, blockMask, mode),
+        })
+        cursor = aligned + size
+    }
+    return { allocations: allocations, unplaced: unplaced }
+}
+
+// The design is a strict binary partition — every block is either a leaf or exactly two
+// halves — so a plan has to be expressed as splits, and the space it does not allocate still
+// has to appear, as free space, because a partition covers the whole base network.
+function vlsmTree(baseNetwork, allocations) {
+    const named = {}
+    allocations.forEach(function (allocation) { named[allocation.cidr] = allocation.name })
+    const ranges = allocations.map(function (allocation) {
+        const parts = allocation.cidr.split('/')
+        const from = ip2int(parts[0])
+        return { start: from, end: from + 2 ** (32 - Number(parts[1])) - 1 }
+    })
+    function build(cidr) {
+        if (named[cidr] !== undefined) return { _note: named[cidr] }
+        const parts = cidr.split('/')
+        const from = ip2int(parts[0])
+        const mask = Number(parts[1])
+        const to = from + 2 ** (32 - mask) - 1
+        const holds = ranges.some(function (range) { return range.start >= from && range.end <= to })
+        if (!holds) return { _note: 'free' }
+        const half = mask + 1
+        const step = 2 ** (32 - half)
+        const left = int2ip(from) + '/' + half
+        const right = int2ip(from + step) + '/' + half
+        const node = {}
+        node[left] = build(left)
+        node[right] = build(right)
+        return node
+    }
+    const tree = {}
+    tree[baseNetwork] = build(baseNetwork)
+    return tree
+}
+
+function currentBaseNetwork() {
+    return ($('#network').val() || '').trim() + '/' + ($('#netsize').val() || '').trim()
+}
+
+function renderVlsmPlan() {
+    const parsed = parseVlsmRequirements($('#vlsmInput').val())
+    const baseNetwork = currentBaseNetwork()
+    const result = $('#vlsmResult')
+    const build = $('#vlsmBuild')
+
+    // Nothing is buildable until the whole list and the base network have been checked.
+    build.prop('disabled', true)
+
+    if (parsed.errors.length) {
+        result.removeClass('d-none').html(
+            '<div>Not everything could be read:</div><ul class="mb-0">' +
+                parsed.errors.map(function (error) {
+                    return '<li>line ' + error.line + ': ' + escapeHtml(error.message) + '</li>'
+                }).join('') +
+            '</ul>'
+        )
+        return
+    }
+
+    if (!validCidrKey(baseNetwork)) {
+        result.removeClass('d-none').text('The base network in the form above is not a usable subnet, so there is nothing to plan inside.')
+        return
+    }
+
+    if (!parsed.requirements.length) {
+        result.removeClass('d-none').text('One requirement per line — a name and a host count, like "Sales, 120".')
+        return
+    }
+
+    const plan = planVlsm(baseNetwork, parsed.requirements, operatingMode)
+    const asked = parsed.requirements.reduce(function (sum, requirement) { return sum + requirement.hosts }, 0)
+
+    let html = '<div class="mb-2">Inside <strong>' + escapeHtml(baseNetwork) + '</strong>, ' + escapeHtml(operatingMode) +
+        ' mode — ' + plan.allocations.length + ' of ' + parsed.requirements.length + ' placed, ' + asked + ' hosts asked for.</div>'
+
+    if (plan.allocations.length) {
+        html += '<table class="table table-sm"><thead><tr><th>Name</th><th>Hosts</th><th>Block</th><th>Usable</th></tr></thead><tbody>' +
+            plan.allocations.map(function (allocation) {
+                return '<tr><td>' + escapeHtml(allocation.name) + '</td><td>' + allocation.hosts + '</td><td>' +
+                    escapeHtml(allocation.cidr) + '</td><td>' + allocation.usable + '</td></tr>'
+            }).join('') +
+            '</tbody></table>'
+    }
+
+    if (plan.unplaced.length) {
+        html += '<div>Could not be placed:</div><ul class="mb-0">' +
+            plan.unplaced.map(function (unplaced) {
+                return '<li>' + escapeHtml(unplaced.name) + ' (' + unplaced.hosts + ' hosts) ' + escapeHtml(unplaced.why) + '</li>'
+            }).join('') +
+            '</ul>'
+    }
+
+    result.removeClass('d-none').html(html)
+    // A plan where nothing could be placed is not a design; leave the button off.
+    build.prop('disabled', plan.allocations.length === 0)
+}
+
+$('#vlsmInput').on('input', renderVlsmPlan)
+$('#vlsmModal').on('show.bs.modal', renderVlsmPlan)
+
+$('#vlsmBuild').on('click', function () {
+    const baseNetwork = currentBaseNetwork()
+    const parsed = parseVlsmRequirements($('#vlsmInput').val())
+    if (parsed.errors.length || !validCidrKey(baseNetwork)) return
+    const mode = operatingMode
+    const plan = planVlsm(baseNetwork, parsed.requirements, mode)
+    if (!plan.allocations.length) return
+    // The plan replaces the design, so it is one step to undo — the same as a split.
+    pushUndoDesign('vlsm', baseNetwork)
+    applyDesign({
+        config_version: '2',
+        base_network: baseNetwork,
+        subnets: vlsmTree(baseNetwork, plan.allocations),
+        operating_mode: mode,
+    })
+    $('#vlsmModal').modal('hide')
+})
+
 // Cells are read in reading order and anything that reads as an address, a block or a range is
 // collected, so the file does not have to be laid out in any particular way: a column of
 // subnets, a column of host addresses, or a whole sheet of notes all work. Entries already
@@ -1018,6 +1221,7 @@ function undoDesignLabel(verb, network) {
     if (verb === 'split') return 'the split of ' + network
     if (verb === 'join') return 'the join of ' + network
     if (verb === 'note') return 'the note on ' + network
+    if (verb === 'vlsm') return 'the VLSM plan for ' + network
     return verb + ' ' + network
 }
 
