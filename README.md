@@ -14,6 +14,9 @@ Huawei Cloud mode, per-level notes, an Excel export and a simplified control lay
 
 - **Visual split / join table** — one click halves a subnet or merges siblings back together.
 - **Undo** — step back through the last splits, joins and note edits, one change at a time.
+- **Plan Subnets (VLSM)** — give a list of names and host counts and get a design back: blocks
+  are handed out largest first, sized by the usable addresses each mode actually leaves, and
+  the space left over is kept as free.
 - **Notes at every level** — every subnet in the hierarchy can carry its own note.
 - **Huawei Cloud mode** — usable addresses are reduced by the addresses Huawei Cloud reserves.
 - **Five operating modes** — Standard, AWS, Azure, OCI and Huawei Cloud (see the table below).
