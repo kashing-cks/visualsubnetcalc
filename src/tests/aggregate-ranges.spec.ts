@@ -65,7 +65,10 @@ test('Addresses above 2**31 are not mangled', async ({ page }) => {
   await openAggregator(page);
   // Address arithmetic done with 32-bit shifts wraps here and produces a wrong block.
   expect(await aggregate(page, '224.0.0.0 - 239.255.255.255')).toBe('224.0.0.0/4');
-  expect(await aggregate(page, '255.255.255.255')).toBe('255.255.255.255/32');
+  await aggregate(page, '255.255.255.255');
+  // The list is aggregated as it is typed, so the answer arrives a moment after the input: read
+  // it with a retrying assertion rather than once, or the previous line's answer comes back.
+  await expect(page.getByLabel(BLOCKS)).toHaveValue('255.255.255.255/32');
 });
 
 test('An en dash is accepted as a range separator', async ({ page }) => {
@@ -135,6 +138,9 @@ test('Aggregating does not touch the design', async ({ page }) => {
   await openAggregator(page);
   await aggregate(page, '10.0.0.5 - 10.0.0.20');
   await page.locator('#aggregateModal .btn-close').click();
+  // A modal that is still fading out leaves a backdrop over the table, and the backdrop swallows
+  // the next click for as long as it is there.
+  await expect(page.locator('.modal.show')).toHaveCount(0);
   // The default design is still the only design.
   await expect(page.locator('#calcbody tr')).toHaveCount(1);
   await expect(page.locator('#calcbody tr').first()).toHaveAttribute(

@@ -19,6 +19,9 @@ test('Huawei reserves first two and last three IPs and enforces /28', async ({ p
   await expect(page.locator('#notifyModalDescription')).toContainText('Huawei Cloud is /28');
   await expect(page.locator('#calcbody tr')).toHaveCount(2);
   await page.locator('#notifyModal .btn-close').click();
+  // A modal that is still fading out leaves a backdrop over the table, and the backdrop swallows
+  // the next click for as long as it is there.
+  await expect(page.locator('.modal.show')).toHaveCount(0);
   await page.locator('#netsize').fill('29');
   await page.locator('#btn_go').click();
   await expect(page.locator('#calcbody tr')).toHaveCount(2);

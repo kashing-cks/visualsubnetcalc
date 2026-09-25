@@ -89,6 +89,9 @@ test('A design is still editable after a bad link', async ({ page }) => {
   await page.goto('/index.html?c=1notvalidlz!!');
   await expectDefaultDesign(page);
   await page.locator('#notifyModal .btn-close').click();
+  // A modal that is still fading out leaves a backdrop over the table, and the backdrop swallows
+  // the next click for as long as it is there.
+  await expect(page.locator('.modal.show')).toHaveCount(0);
   await page.locator('#calcbody td.split .subnet-action').first().click();
   await expect(page.locator('#calcbody tr')).toHaveCount(2);
 });

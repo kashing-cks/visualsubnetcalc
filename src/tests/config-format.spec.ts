@@ -182,6 +182,9 @@ test('A refused paste leaves the current design alone', async ({ page }) => {
 
   await importJson(page, { config_version: '1', subnets: null });
   await page.locator('#notifyModal .btn-close').click();
+  // A modal that is still fading out leaves a backdrop over the table, and the backdrop swallows
+  // the next click for as long as it is there.
+  await expect(page.locator('.modal.show')).toHaveCount(0);
 
   // The rejected paste must not have changed what is on screen.
   expect(await rowLabels(page)).toEqual(['10.0.0.0/26', '10.0.0.64/26']);

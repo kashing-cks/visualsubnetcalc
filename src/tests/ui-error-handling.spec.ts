@@ -40,6 +40,8 @@ test('Network Boundary Correction', async ({ page }) => {
   await expect(page.locator('#notifyModalDescription')).toContainText('Your network input is not on a network boundary for this network size. It has been automatically changed:');
   await expect(page.locator('#notifyModalDescription')).toContainText('123.45.67.89 -> 123.45.64.0');
   await page.getByLabel('Warning!').getByLabel('Close').click();
+  // The modal fades out with a backdrop over the form; clicking through it never arrives.
+  await expect(page.locator('.modal.show')).toHaveCount(0);
   await expect(page.getByLabel('Network Address')).toHaveValue('123.45.64.0');
   await page.getByLabel('Network Size').click();
   await expect(page.getByRole('cell', { name: '123.45.64.0/20 Subnet Address' })).toContainText('123.45.64.0/20');
